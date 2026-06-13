@@ -1,0 +1,58 @@
+name: Watch market
+
+on:
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm ci
+      - name: Find deals on watchlist
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+          EBAY_DEV_ID: ${{ secrets.EBAY_DEV_ID }}
+          EBAY_ENV: PRODUCTION
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+          GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY }}
+          GSHEET_INVENTORY_ID: ${{ secrets.GSHEET_INVENTORY_ID }}
+          GSHEET_WATCHLIST_ID: ${{ secrets.GSHEET_WATCHLIST_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          npx tsx cli/index.ts find-deals --json > deals.json || true
+          node -e "
+            const fs = require('fs');
+            const url = process.env.DISCORD_WEBHOOK_URL;
+            if (!url) { console.log('no webhook configured'); process.exit(0); }
+            const deals = JSON.parse(fs.readFileSync('deals.json','utf8')||'[]');
+            if (!deals.length) { console.log('no deals'); process.exit(0); }
+            const top = deals.slice(0, 10).map(d =>
+              \`**\${d.score.verdict}** \${d.dealPct}% under median · profit \$\${d.score.profit} (ROI \${d.score.roiPct}%)\n\${d.listing.title.slice(0,90)}\n\${d.listing.url}\`
+            ).join('\n\n');
+            fetch(url, { method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ content: \`**\${deals.length} deal(s) found**\n\n\${top}\` })
+            }).then(r => console.log('posted', r.status));
+          "
+
+  refresh-prices:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && contains(github.event.schedule, '0 0 * * *')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm ci
+      - name: Update market values on inventory
+        env:
+          EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
+          EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+          GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY }}
+          GSHEET_INVENTORY_ID: ${{ secrets.GSHEET_INVENTORY_ID }}
+        run: npx tsx cli/index.ts update-prices

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CardRow } from "@/lib/db";
+import type { Card } from "@/lib/storage";
+type CardRow = Card;
 
 type Summary = {
   totalCards: number;
@@ -48,7 +49,7 @@ export default function InventoryPage() {
     load();
   }
 
-  async function updateRow(id: number, patch: Partial<CardRow>) {
+  async function updateRow(id: string, patch: Partial<CardRow>) {
     await fetch(`/api/inventory/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -57,7 +58,7 @@ export default function InventoryPage() {
     load();
   }
 
-  async function remove(id: number) {
+  async function remove(id: string) {
     if (!confirm("Delete this card?")) return;
     await fetch(`/api/inventory/${id}`, { method: "DELETE" });
     load();
@@ -128,8 +129,8 @@ export default function InventoryPage() {
                     step="0.01"
                     defaultValue={c.soldFor ?? ""}
                     onBlur={(e) => {
-                      const v = e.target.value ? Number(e.target.value) : null;
-                      if (v !== c.soldFor) updateRow(c.id, { soldFor: v, soldAt: v ? new Date().toISOString().slice(0, 10) : null });
+                      const v = e.target.value ? Number(e.target.value) : undefined;
+                      if (v !== c.soldFor) updateRow(c.id, { soldFor: v, soldAt: v ? new Date().toISOString().slice(0, 10) : undefined });
                     }}
                     className="w-24 text-right bg-ink border border-white/10 rounded px-2 py-1"
                   />

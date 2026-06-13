@@ -1,16 +1,22 @@
 {
   "name": "sportscardhelper",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "type": "module",
   "scripts": {
+    "cli": "tsx cli/index.ts",
+    "ch": "tsx cli/index.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "watch:deals": "tsx cli/index.ts find-deals --watchlist",
+    "watch:prices": "tsx cli/index.ts update-prices"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
+    "googleapis": "^144.0.0",
     "next": "^14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1"
@@ -23,6 +29,7 @@
     "autoprefixer": "10.4.20",
     "postcss": "8.4.47",
     "tailwindcss": "3.4.13",
+    "tsx": "^4.19.2",
     "typescript": "5.6.2"
   }
 }

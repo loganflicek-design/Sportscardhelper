@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteCard, updateCard } from "@/lib/db";
+import { deleteCard, updateCard } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
   const patch = await req.json();
-  const updated = updateCard(id, patch);
+  const updated = await updateCard(params.id, patch);
   if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json(updated);
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
-  const ok = deleteCard(Number(params.id));
+  const ok = await deleteCard(params.id);
   return NextResponse.json({ ok });
 }
