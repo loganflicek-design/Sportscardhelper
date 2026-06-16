@@ -11,39 +11,17 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: npm ci
-      - name: Verify eBay API reachable
+      - name: Run comp lookup via real CLI
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
           EBAY_DEV_ID: ${{ secrets.EBAY_DEV_ID }}
           EBAY_ENV: PRODUCTION
         run: |
-          echo "=== Testing eBay OAuth token ==="
-          npx tsx -e '
-            const appId = process.env.EBAY_APP_ID;
-            const certId = process.env.EBAY_CERT_ID;
-            if (!appId || !certId) { console.log("❌ Missing env"); process.exit(1); }
-            const basic = Buffer.from(appId + ":" + certId).toString("base64");
-            const res = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
-              method: "POST",
-              headers: { Authorization: "Basic " + basic, "Content-Type": "application/x-www-form-urlencoded" },
-              body: "grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope",
-            });
-            console.log("OAuth status:", res.status);
-            const j = await res.json();
-            if (!res.ok) { console.log("❌ Auth failed:", JSON.stringify(j).slice(0, 500)); process.exit(1); }
-            console.log("✅ Auth works");
-
-            const u = new URL("https://api.ebay.com/buy/browse/v1/item_summary/search");
-            u.searchParams.set("q", "2018 Optic Luka Doncic Rated Rookie PSA 10");
-            u.searchParams.set("limit", "5");
-            u.searchParams.set("category_ids", "212");
-            const s = await fetch(u.toString(), { headers: { Authorization: "Bearer " + j.access_token } });
-            console.log("Browse status:", s.status);
-            const sj = await s.json();
-            const items = sj.itemSummaries || [];
-            console.log("✅ Found " + items.length + " active listings");
-            for (const it of items.slice(0, 5)) {
-              console.log("  $" + it.price?.value + " · " + (it.title || "").slice(0, 70));
-            }
-          '
+          echo "=== App ID prefix: ${EBAY_APP_ID:0:12}... ==="
+          echo "=== Cert ID prefix: ${EBAY_CERT_ID:0:12}... ==="
+          echo ""
+          echo "=== Comp lookup test ==="
+          npx tsx cli/index.ts comp "2018 Donruss Optic Luka Doncic Rated Rookie PSA 10"
+          echo ""
+          echo "✅ DONE"
