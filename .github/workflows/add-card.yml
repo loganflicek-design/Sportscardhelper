@@ -1,0 +1,61 @@
+name: Add card to inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "Full card title (e.g. '2020 Chronicles Jordan Love Prizm Black-Silver #PB4 PSA 10')"
+        required: true
+        type: string
+      cost:
+        description: "What you paid (USD)"
+        required: true
+        type: string
+      player:
+        description: "Player name (optional)"
+        required: false
+        type: string
+      year:
+        description: "Year (optional)"
+        required: false
+        type: string
+      setName:
+        description: "Set name, e.g. Chronicles, Optic (optional)"
+        required: false
+        type: string
+      parallel:
+        description: "Parallel/variant (optional)"
+        required: false
+        type: string
+      grade:
+        description: "Grade, e.g. 'PSA 10' (optional)"
+        required: false
+        type: string
+      rookie:
+        description: "Rookie card?"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm ci
+      - name: Add card
+        env:
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+          GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY }}
+          GSHEET_INVENTORY_ID: ${{ secrets.GSHEET_INVENTORY_ID }}
+        run: |
+          ARGS=(add "${{ inputs.title }}" --cost "${{ inputs.cost }}")
+          [ -n "${{ inputs.player }}" ] && ARGS+=(--player "${{ inputs.player }}")
+          [ -n "${{ inputs.year }}" ] && ARGS+=(--year "${{ inputs.year }}")
+          [ -n "${{ inputs.setName }}" ] && ARGS+=(--set "${{ inputs.setName }}")
+          [ -n "${{ inputs.parallel }}" ] && ARGS+=(--parallel "${{ inputs.parallel }}")
+          [ -n "${{ inputs.grade }}" ] && ARGS+=(--grade "${{ inputs.grade }}")
+          [ "${{ inputs.rookie }}" = "true" ] && ARGS+=(--rookie true)
+          npx tsx cli/index.ts "${ARGS[@]}"
