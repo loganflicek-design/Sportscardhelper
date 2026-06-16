@@ -1,8 +1,10 @@
 import { fetchSoldComps, type CompsResult, type SoldComp } from "./ebay";
-import { hasEbayApiCredentials, searchSoldListings } from "./ebay-api";
+import { hasEbayApiCredentials, searchActiveListings, searchSoldListings } from "./ebay-api";
 
-export type CompSource = "marketplace-insights" | "scraper";
-export type UnifiedComps = CompsResult & { source: CompSource };
+export type CompSource = "marketplace-insights" | "browse-active" | "scraper";
+export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
+
+const ACTIVE_TO_SOLD_DISCOUNT = 0.9;
 
 export async function getComps(query: string, limit = 60): Promise<UnifiedComps> {
   if (hasEbayApiCredentials()) {
@@ -22,9 +24,34 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
         return { ...summarize(query, items), source: "marketplace-insights" };
       }
     } catch {
-      // fall through to scraper
+      // Marketplace Insights not granted — fall through.
+    }
+
+    try {
+      const active = await searchActiveListings(query, { limit });
+      if (active.length) {
+        const items: SoldComp[] = active.map((a) => ({
+          title: a.title,
+          price: +(a.price * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
+          shipping: +(a.shipping * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
+          totalPrice: +(a.totalPrice * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
+          soldDate: null,
+          url: a.url,
+          image: a.image ?? null,
+          condition: a.condition ?? null,
+        }));
+        const summary = summarize(query, items);
+        return {
+          ...summary,
+          source: "browse-active",
+          note: `Sold-comp API not granted yet — using active-listing asking prices × ${ACTIVE_TO_SOLD_DISCOUNT} as estimated sell price.`,
+        };
+      }
+    } catch {
+      // fall through to scraper as last resort
     }
   }
+
   const scraped = await fetchSoldComps(query, limit);
   return { ...scraped, source: "scraper" };
 }
