@@ -1,0 +1,31 @@
+name: Test Sheets connectivity
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm ci
+      - name: Add a card to your Sheet, list, then delete
+        env:
+          GOOGLE_SERVICE_ACCOUNT_EMAIL: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL }}
+          GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY }}
+          GSHEET_INVENTORY_ID: ${{ secrets.GSHEET_INVENTORY_ID }}
+          GSHEET_WATCHLIST_ID: ${{ secrets.GSHEET_WATCHLIST_ID }}
+        run: |
+          echo "=== Adding test card to your Sheet ==="
+          npx tsx cli/index.ts add "CONNECTION TEST — safe to delete" --cost 1 --json | tee /tmp/added.json
+          ID=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/added.json","utf8")).id)')
+          echo ""
+          echo "=== Reading your inventory ==="
+          npx tsx cli/index.ts list
+          echo ""
+          echo "=== Cleaning up test card ==="
+          npx tsx cli/index.ts delete "$ID"
+          echo ""
+          echo "✅ DONE — go check your 'Card Inventory' sheet. The row should have appeared briefly."
