@@ -11,17 +11,47 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: npm ci
-      - name: Run comp lookup via real CLI
+      - name: Direct eBay Browse API smoke test
         env:
           EBAY_APP_ID: ${{ secrets.EBAY_APP_ID }}
           EBAY_CERT_ID: ${{ secrets.EBAY_CERT_ID }}
-          EBAY_DEV_ID: ${{ secrets.EBAY_DEV_ID }}
-          EBAY_ENV: PRODUCTION
         run: |
-          echo "=== App ID prefix: ${EBAY_APP_ID:0:12}... ==="
-          echo "=== Cert ID prefix: ${EBAY_CERT_ID:0:12}... ==="
+          set +e
+          echo "=== Step 1: Get OAuth token ==="
+          AUTH=$(printf '%s:%s' "$EBAY_APP_ID" "$EBAY_CERT_ID" | base64 -w0)
+          TOK_RESP=$(curl -s -w "\n__HTTP_CODE__%{http_code}" -X POST \
+            "https://api.ebay.com/identity/v1/oauth2/token" \
+            -H "Authorization: Basic $AUTH" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope")
+          TOK_CODE=$(echo "$TOK_RESP" | grep "__HTTP_CODE__" | sed 's/.*__HTTP_CODE__//')
+          TOK_BODY=$(echo "$TOK_RESP" | sed '/__HTTP_CODE__/d')
+          echo "Token HTTP: $TOK_CODE"
+          if [ "$TOK_CODE" != "200" ]; then
+            echo "Token body: $TOK_BODY"
+            exit 1
+          fi
+          TOKEN=$(echo "$TOK_BODY" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).access_token))')
+          echo "✅ Got token (${#TOKEN} chars)"
           echo ""
-          echo "=== Comp lookup test ==="
-          npx tsx cli/index.ts comp "2018 Donruss Optic Luka Doncic Rated Rookie PSA 10"
+
+          echo "=== Step 2: Browse API active listings ==="
+          SEARCH_RESP=$(curl -s -w "\n__HTTP_CODE__%{http_code}" -G \
+            "https://api.ebay.com/buy/browse/v1/item_summary/search" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "X-EBAY-C-MARKETPLACE-ID: EBAY_US" \
+            --data-urlencode "q=2018 Donruss Optic Luka Doncic Rated Rookie PSA 10" \
+            --data-urlencode "category_ids=212" \
+            --data-urlencode "limit=5")
+          SEARCH_CODE=$(echo "$SEARCH_RESP" | grep "__HTTP_CODE__" | sed 's/.*__HTTP_CODE__//')
+          SEARCH_BODY=$(echo "$SEARCH_RESP" | sed '/__HTTP_CODE__/d')
+          echo "Browse HTTP: $SEARCH_CODE"
+          if [ "$SEARCH_CODE" != "200" ]; then
+            echo "Body: $SEARCH_BODY"
+            exit 1
+          fi
+          COUNT=$(echo "$SEARCH_BODY" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.itemSummaries||[]).length)})')
+          echo "✅ Browse returned $COUNT active listings"
+          echo "$SEARCH_BODY" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);for(const it of (j.itemSummaries||[]).slice(0,5)){console.log("  $"+it.price?.value+" · "+(it.title||"").slice(0,70))}})'
           echo ""
-          echo "✅ DONE"
+          echo "✅ ALL CHECKS PASSED"

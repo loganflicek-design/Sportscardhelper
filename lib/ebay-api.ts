@@ -59,12 +59,13 @@ export async function searchActiveListings(
   url.searchParams.set("q", query);
   url.searchParams.set("limit", String(opts.limit ?? 50));
   url.searchParams.set("category_ids", opts.categoryId ?? "212");
-  const filters: string[] = ["buyingOptions:{FIXED_PRICE|AUCTION}"];
-  if (opts.maxPrice) filters.push(`price:[..${opts.maxPrice}],priceCurrency:USD`);
-  url.searchParams.set("filter", filters.join(","));
-  url.searchParams.set("sort", "price");
+  if (opts.maxPrice) {
+    url.searchParams.set("filter", `price:[..${opts.maxPrice}],priceCurrency:USD`);
+  }
 
-  const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}`, "X-EBAY-C-MARKETPLACE-ID": "EBAY_US" },
+  });
   if (!res.ok) throw new Error(`Browse search failed: ${res.status} ${await res.text()}`);
   const json = (await res.json()) as {
     itemSummaries?: Array<{
