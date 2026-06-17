@@ -40,7 +40,7 @@ export default function ScanPage() {
     try {
       const [full, thumb] = await Promise.all([
         resizeImage(file, 1280),
-        resizeImage(file, 400),
+        resizeImage(file, 160, 0.65),
       ]);
       setFullImage({ base64: full.base64, mimeType: full.mimeType });
       setThumbImage(thumb);

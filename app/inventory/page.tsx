@@ -175,7 +175,7 @@ function CardTile({
     if (!file) return;
     setUploading(true);
     try {
-      const thumb = await resizeImage(file, 400);
+      const thumb = await resizeImage(file, 160, 0.65);
       await onUpload(thumb.base64, thumb.mimeType);
     } finally {
       setUploading(false);

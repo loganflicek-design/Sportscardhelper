@@ -1,6 +1,7 @@
 export function resizeImage(
   file: File,
-  maxDim: number
+  maxDim: number,
+  quality = 0.82
 ): Promise<{ base64: string; mimeType: string; dataUrl: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -26,7 +27,7 @@ export function resizeImage(
           reader.readAsDataURL(blob);
         },
         "image/jpeg",
-        0.82
+        quality
       );
     };
     img.onerror = reject;

@@ -41,8 +41,9 @@ export async function POST(req: NextRequest) {
 
   let imageUrl: string | undefined = body.imageUrl;
   if (body.imageBase64 && body.imageMimeType) {
-    // Store as data URL so it survives in the Sheet cell (≤ ~50KB after resize).
-    imageUrl = `data:${body.imageMimeType};base64,${body.imageBase64}`;
+    const candidate = `data:${body.imageMimeType};base64,${body.imageBase64}`;
+    // Google Sheets cells cap at 50,000 chars — drop the image rather than failing.
+    if (candidate.length <= 50000) imageUrl = candidate;
   }
 
   const card = await addCard({
