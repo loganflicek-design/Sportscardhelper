@@ -161,6 +161,10 @@ export async function addWatch(entry: Omit<WatchlistEntry, "id" | "createdAt">):
 }
 
 export async function removeWatch(id: string): Promise<boolean> {
+  if (sheetsConfigured() && process.env.GSHEET_WATCHLIST_ID) {
+    const { removeWatchFromSheet } = await import("./sheets");
+    return removeWatchFromSheet(id);
+  }
   const list = readJson<WatchlistEntry[]>(WATCHLIST_PATH, []);
   const next = list.filter((w) => w.id !== id);
   if (next.length === list.length) return false;

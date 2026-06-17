@@ -177,3 +177,23 @@ export async function appendWatchToSheet(entry: WatchlistEntry): Promise<void> {
     requestBody: { values: [objectToRow(WATCHLIST_HEADERS, entry as Record<string, unknown>)] },
   });
 }
+
+export async function removeWatchFromSheet(watchId: string): Promise<boolean> {
+  const id = process.env.GSHEET_WATCHLIST_ID!;
+  const s = client();
+  const res = await s.spreadsheets.values.get({ spreadsheetId: id, range: `${WATCHLIST_TAB}!A2:Z` });
+  const rows = res.data.values ?? [];
+  const rowIdx = rows.findIndex((r) => r[0] === watchId);
+  if (rowIdx < 0) return false;
+  const meta = await s.spreadsheets.get({ spreadsheetId: id });
+  const sheet = meta.data.sheets?.find((sh) => sh.properties?.title === WATCHLIST_TAB);
+  const sheetId = sheet?.properties?.sheetId;
+  if (sheetId === undefined || sheetId === null) return false;
+  await s.spreadsheets.batchUpdate({
+    spreadsheetId: id,
+    requestBody: {
+      requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: rowIdx + 1, endIndex: rowIdx + 2 } } }],
+    },
+  });
+  return true;
+}

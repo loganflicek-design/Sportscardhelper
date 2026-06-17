@@ -46,6 +46,7 @@ export default function HomePage() {
         <ActionCard href="/scan" icon="💰" label="Just price it" sub="Snap → see comps" />
         <ActionCard href="/comps" icon="🔍" label="Manual comps" sub="Type a title" />
         <ActionCard href="/inventory" icon="📦" label="Inventory" sub="Manage cards" />
+        <ActionCard href="/watchlist" icon="🎯" label="Watchlist" sub="Hunt for deals" />
       </div>
 
       {/* Portfolio overview */}
