@@ -18,11 +18,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </Link>
             <div className="flex gap-3 text-sm text-white/80 flex-shrink-0">
               <NavLink href="/scan" highlight>📷 Scan</NavLink>
+              <NavLink href="/show">🏃 Show Mode</NavLink>
               <NavLink href="/">Dashboard</NavLink>
               <NavLink href="/inventory">Inventory</NavLink>
               <NavLink href="/comps">Comps</NavLink>
               <NavLink href="/watchlist">Watchlist</NavLink>
-              <NavLink href="/listing">Listing</NavLink>
+              <NavLink href="/grade">Grade ROI</NavLink>
+              <NavLink href="/research">Research</NavLink>
+              <NavLink href="/pnl">P&L</NavLink>
               <NavLink href="/settings">Rules</NavLink>
             </div>
           </nav>

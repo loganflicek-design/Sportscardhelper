@@ -43,10 +43,13 @@ export default function HomePage() {
       {/* Quick actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <ActionCard href="/scan" icon="📷" label="Scan a card" sub="ID + comps + save" primary />
-        <ActionCard href="/scan" icon="💰" label="Just price it" sub="Snap → see comps" />
+        <ActionCard href="/show" icon="🏃" label="Card Show Mode" sub="Fast BUY/PASS at shows" />
         <ActionCard href="/comps" icon="🔍" label="Manual comps" sub="Type a title" />
         <ActionCard href="/inventory" icon="📦" label="Inventory" sub="Manage cards" />
         <ActionCard href="/watchlist" icon="🎯" label="Watchlist" sub="Hunt for deals" />
+        <ActionCard href="/grade" icon="⭐" label="Grade ROI" sub="Worth sending to PSA?" />
+        <ActionCard href="/research" icon="📊" label="Player Research" sub="Find best plays" />
+        <ActionCard href="/pnl" icon="💵" label="Profit Dashboard" sub="See what's working" />
       </div>
 
       {/* Portfolio overview */}

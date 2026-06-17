@@ -21,10 +21,39 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
   maybeMinRoiPct: 20,
   maybeMinProfitDollars: 3,
   sellMarkupPct: 5,
-  feeRate: 0.1325,
-  fixedFee: 0.3,
-  shippingCost: 1.5,
+  feeRate: 0,
+  fixedFee: 0,
+  shippingCost: 5,
 };
+
+export const PLATFORM_PRESETS = {
+  tiktok_ig_cash: {
+    label: "TikTok / Instagram (Venmo/Zelle/cash)",
+    feeRate: 0,
+    fixedFee: 0,
+    shippingCost: 5,
+  },
+  tiktok_shop: {
+    label: "TikTok Shop",
+    feeRate: 0.08,
+    fixedFee: 0.3,
+    shippingCost: 5,
+  },
+  instagram_paypal: {
+    label: "Instagram (PayPal G&S)",
+    feeRate: 0.0349,
+    fixedFee: 0.49,
+    shippingCost: 5,
+  },
+  ebay: {
+    label: "eBay",
+    feeRate: 0.1325,
+    fixedFee: 0.3,
+    shippingCost: 1.5,
+  },
+} as const;
+
+export type PlatformKey = keyof typeof PLATFORM_PRESETS;
 
 export function resolveThresholds(input?: Partial<Thresholds>): Thresholds {
   const fromEnv: Partial<Thresholds> = {

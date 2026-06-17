@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DEFAULT_THRESHOLDS, type Thresholds } from "@/lib/settings";
+import { DEFAULT_THRESHOLDS, PLATFORM_PRESETS, type PlatformKey, type Thresholds } from "@/lib/settings";
 import { loadThresholds, resetThresholds, saveThresholds } from "@/lib/client-settings";
 
 export default function SettingsPage() {
@@ -27,6 +27,11 @@ export default function SettingsPage() {
   function reset() {
     resetThresholds();
     setT(DEFAULT_THRESHOLDS);
+  }
+
+  function applyPreset(key: PlatformKey) {
+    const p = PLATFORM_PRESETS[key];
+    setT((prev) => ({ ...prev, feeRate: p.feeRate, fixedFee: p.fixedFee, shippingCost: p.shippingCost }));
   }
 
   return (
@@ -63,7 +68,27 @@ export default function SettingsPage() {
       </section>
 
       <section className="card space-y-4">
-        <h2 className="font-semibold text-white">eBay Fees & Shipping</h2>
+        <h2 className="font-semibold text-white">Selling Platform Fees</h2>
+        <div>
+          <div className="label mb-2">Quick presets</div>
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(PLATFORM_PRESETS) as PlatformKey[]).map((k) => {
+              const p = PLATFORM_PRESETS[k];
+              const active = t.feeRate === p.feeRate && t.fixedFee === p.fixedFee && t.shippingCost === p.shippingCost;
+              return (
+                <button
+                  key={k}
+                  onClick={() => applyPreset(k)}
+                  className={`text-xs rounded-full px-3 py-1.5 border transition-colors ${
+                    active ? "border-accent bg-accent/10 text-accent" : "border-white/10 text-white/60 hover:border-white/30"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="grid grid-cols-3 gap-4">
           <NumberField label="Fee rate" suffix="%" step="0.05" value={+(t.feeRate * 100).toFixed(2)} onChange={(v) => update("feeRate", String(Number(v) / 100))} />
           <NumberField label="Fixed fee" prefix="$" step="0.01" value={t.fixedFee} onChange={(v) => update("fixedFee", v)} />

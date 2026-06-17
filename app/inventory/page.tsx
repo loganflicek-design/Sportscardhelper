@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Card } from "@/lib/storage";
+import { resizeImage } from "@/lib/image";
 
 type Summary = {
   totalCards: number;
@@ -131,6 +132,14 @@ export default function InventoryPage() {
               onSoldFor={(v) => updateRow(c.id, { soldFor: v, soldAt: v ? new Date().toISOString().slice(0, 10) : undefined })}
               onRefresh={() => refreshComps(c)}
               onDelete={() => remove(c.id)}
+              onUpload={async (base64, mimeType) => {
+                await fetch(`/api/inventory/${c.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ imageBase64: base64, imageMimeType: mimeType }),
+                });
+                load();
+              }}
             />
           ))}
         </div>
@@ -146,6 +155,7 @@ function CardTile({
   onSoldFor,
   onRefresh,
   onDelete,
+  onUpload,
 }: {
   card: Card;
   refreshing: boolean;
@@ -153,19 +163,62 @@ function CardTile({
   onSoldFor: (v: number | undefined) => void;
   onRefresh: () => void;
   onDelete: () => void;
+  onUpload: (base64: string, mimeType: string) => Promise<void>;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
   const pnl = card.marketValue && card.cost ? card.marketValue - card.cost : null;
   const pnlPct = pnl !== null && card.cost ? (pnl / card.cost) * 100 : null;
 
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const thumb = await resizeImage(file, 400);
+      await onUpload(thumb.base64, thumb.mimeType);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
   return (
     <div className="card !p-0 overflow-hidden flex flex-col">
-      <div className="aspect-[3/4] bg-black flex items-center justify-center overflow-hidden">
+      <div className="aspect-[3/4] bg-black flex items-center justify-center overflow-hidden relative group">
         {card.imageUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={card.imageUrl} alt={card.title} className="w-full h-full object-contain" />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={card.imageUrl} alt={card.title} className="w-full h-full object-contain" />
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="absolute top-2 right-2 bg-black/60 backdrop-blur text-white/80 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Replace photo"
+            >
+              {uploading ? "…" : "↻ Replace"}
+            </button>
+          </>
         ) : (
-          <div className="text-white/20 text-xs">no photo</div>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="w-full h-full flex flex-col items-center justify-center gap-2 text-white/30 hover:text-accent hover:bg-accent/5 transition-colors"
+          >
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.776 48.776 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+            </svg>
+            <span className="text-xs">{uploading ? "Uploading…" : "+ Add photo"}</span>
+          </button>
         )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleUpload}
+        />
       </div>
 
       <div className="p-3 space-y-2 flex-1 flex flex-col">
