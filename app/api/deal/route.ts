@@ -13,10 +13,8 @@ export async function POST(req: NextRequest) {
   const result = scoreDeal({
     askingPrice,
     estimatedSalePrice,
-    shippingCost: body.shippingCost,
     shippingChargedToBuyer: body.shippingChargedToBuyer,
-    feeRate: body.feeRate,
-    fixedFee: body.fixedFee,
+    thresholds: body.thresholds,
   });
   return NextResponse.json(result);
 }

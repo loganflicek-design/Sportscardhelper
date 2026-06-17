@@ -1,8 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Card } from "@/lib/storage";
-type CardRow = Card;
 
 type Summary = {
   totalCards: number;
@@ -10,15 +10,21 @@ type Summary = {
   listed: number;
   sold: number;
   totalCostBasis: number;
+  activeCostBasis: number;
+  totalMarketValue: number;
+  unrealizedProfit: number;
   realizedProfit: number;
 };
 
-const STATUSES: CardRow["status"][] = ["raw", "graded", "listed", "sold"];
+const STATUSES: Card["status"][] = ["raw", "graded", "listed", "sold"];
+type Filter = "all" | Card["status"];
 
 export default function InventoryPage() {
-  const [cards, setCards] = useState<CardRow[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [form, setForm] = useState({ title: "", cost: "", player: "", year: "", grade: "" });
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
   async function load() {
     const r = await fetch("/api/inventory", { cache: "no-store" });
@@ -31,25 +37,7 @@ export default function InventoryPage() {
     load();
   }, []);
 
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    await fetch("/api/inventory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: form.title,
-        cost: Number(form.cost || 0),
-        player: form.player || null,
-        year: form.year ? Number(form.year) : null,
-        grade: form.grade || null,
-      }),
-    });
-    setForm({ title: "", cost: "", player: "", year: "", grade: "" });
-    load();
-  }
-
-  async function updateRow(id: string, patch: Partial<CardRow>) {
+  async function updateRow(id: string, patch: Partial<Card>) {
     await fetch(`/api/inventory/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -64,100 +52,218 @@ export default function InventoryPage() {
     load();
   }
 
+  async function refreshComps(c: Card) {
+    setRefreshingId(c.id);
+    try {
+      const r = await fetch(`/api/comps?q=${encodeURIComponent(c.title)}`);
+      const d = await r.json();
+      if (r.ok && d.median) {
+        await updateRow(c.id, {
+          marketValue: d.median,
+          marketValueAt: new Date().toISOString().slice(0, 10),
+        });
+      }
+    } finally {
+      setRefreshingId(null);
+    }
+  }
+
+  const visible = cards
+    .filter((c) => filter === "all" || c.status === filter)
+    .filter((c) => !query || c.title.toLowerCase().includes(query.toLowerCase()));
+
   return (
     <div className="space-y-6">
+      {/* Portfolio summary */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-          <Stat label="Total" value={summary.totalCards} />
-          <Stat label="In hand" value={summary.inHand} />
-          <Stat label="Listed" value={summary.listed} />
-          <Stat label="Sold" value={summary.sold} />
-          <Stat label="Cost basis" value={`$${summary.totalCostBasis.toFixed(2)}`} />
-          <Stat
-            label="Realized P&L"
-            value={`$${summary.realizedProfit.toFixed(2)}`}
-            tone={summary.realizedProfit >= 0 ? "good" : "bad"}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <BigStat label="Cards" value={summary.totalCards} sub={`${summary.inHand} in hand · ${summary.listed} listed · ${summary.sold} sold`} />
+          <BigStat label="Cost basis" value={`$${summary.activeCostBasis.toFixed(0)}`} sub={`Total invested in unsold`} />
+          <BigStat label="Market value" value={`$${summary.totalMarketValue.toFixed(0)}`} sub="Sum of latest comps" />
+          <BigStat
+            label="Unrealized P&L"
+            value={`${summary.unrealizedProfit >= 0 ? "+" : ""}$${summary.unrealizedProfit.toFixed(0)}`}
+            sub={`Realized: $${summary.realizedProfit.toFixed(0)}`}
+            tone={summary.unrealizedProfit >= 0 ? "good" : "bad"}
           />
         </div>
       )}
 
-      <section className="card">
-        <h2 className="text-lg font-semibold mb-3">Add card</h2>
-        <form onSubmit={add} className="grid md:grid-cols-6 gap-2">
-          <input className="input md:col-span-2" placeholder="Title (e.g. 2018 Optic Luka RC)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          <input className="input" placeholder="Player" value={form.player} onChange={(e) => setForm({ ...form, player: e.target.value })} />
-          <input className="input" placeholder="Year" inputMode="numeric" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
-          <input className="input" placeholder="Grade" value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} />
-          <input className="input" placeholder="Cost $" inputMode="decimal" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
-          <button className="btn md:col-span-6">Add</button>
-        </form>
-      </section>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex gap-1 rounded-xl border border-white/10 p-1 bg-ink">
+          {(["all", ...STATUSES] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1 rounded-lg text-sm capitalize transition-colors ${
+                filter === f ? "bg-accent text-ink" : "text-white/60 hover:text-white"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <input
+          className="input flex-1 min-w-[180px]"
+          placeholder="Search title…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <Link href="/scan" className="btn">+ Scan a card</Link>
+      </div>
 
-      <section className="card overflow-x-auto">
-        <h2 className="text-lg font-semibold mb-3">Cards</h2>
-        <table className="w-full text-sm">
-          <thead className="text-white/50 text-xs uppercase">
-            <tr>
-              <th className="text-left py-2">Title</th>
-              <th className="text-right">Cost</th>
-              <th className="text-left">Status</th>
-              <th className="text-right">Sold for</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {cards.map((c) => (
-              <tr key={c.id}>
-                <td className="py-2 pr-2">{c.title}</td>
-                <td className="text-right font-mono">${c.cost.toFixed(2)}</td>
-                <td>
-                  <select
-                    value={c.status}
-                    onChange={(e) => updateRow(c.id, { status: e.target.value as CardRow["status"] })}
-                    className="bg-ink border border-white/10 rounded px-2 py-1 text-sm"
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="text-right">
-                  <input
-                    type="number"
-                    step="0.01"
-                    defaultValue={c.soldFor ?? ""}
-                    onBlur={(e) => {
-                      const v = e.target.value ? Number(e.target.value) : undefined;
-                      if (v !== c.soldFor) updateRow(c.id, { soldFor: v, soldAt: v ? new Date().toISOString().slice(0, 10) : undefined });
-                    }}
-                    className="w-24 text-right bg-ink border border-white/10 rounded px-2 py-1"
-                  />
-                </td>
-                <td className="text-right">
-                  <button onClick={() => remove(c.id)} className="text-bad text-xs hover:underline">delete</button>
-                </td>
-              </tr>
-            ))}
-            {!cards.length && (
-              <tr>
-                <td colSpan={5} className="py-6 text-center text-white/40">No cards yet. Add your first one above.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+      {/* Card grid */}
+      {visible.length === 0 ? (
+        <div className="card text-center py-12 text-white/40">
+          {cards.length === 0
+            ? <>No cards yet. <Link href="/scan" className="text-accent hover:underline">Scan your first one</Link>.</>
+            : "No cards match that filter."}
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {visible.map((c) => (
+            <CardTile
+              key={c.id}
+              card={c}
+              refreshing={refreshingId === c.id}
+              onStatus={(s) => updateRow(c.id, { status: s })}
+              onSoldFor={(v) => updateRow(c.id, { soldFor: v, soldAt: v ? new Date().toISOString().slice(0, 10) : undefined })}
+              onRefresh={() => refreshComps(c)}
+              onDelete={() => remove(c.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string | number; tone?: "good" | "bad" }) {
+function CardTile({
+  card,
+  refreshing,
+  onStatus,
+  onSoldFor,
+  onRefresh,
+  onDelete,
+}: {
+  card: Card;
+  refreshing: boolean;
+  onStatus: (s: Card["status"]) => void;
+  onSoldFor: (v: number | undefined) => void;
+  onRefresh: () => void;
+  onDelete: () => void;
+}) {
+  const pnl = card.marketValue && card.cost ? card.marketValue - card.cost : null;
+  const pnlPct = pnl !== null && card.cost ? (pnl / card.cost) * 100 : null;
+
+  return (
+    <div className="card !p-0 overflow-hidden flex flex-col">
+      <div className="aspect-[3/4] bg-black flex items-center justify-center overflow-hidden">
+        {card.imageUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={card.imageUrl} alt={card.title} className="w-full h-full object-contain" />
+        ) : (
+          <div className="text-white/20 text-xs">no photo</div>
+        )}
+      </div>
+
+      <div className="p-3 space-y-2 flex-1 flex flex-col">
+        <div className="font-medium text-sm leading-tight line-clamp-2 min-h-[2.5rem]">{card.title}</div>
+
+        {(card.player || card.year || card.grade) && (
+          <div className="text-xs text-white/50">
+            {[card.year, card.player, card.grade].filter(Boolean).join(" · ")}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between text-xs">
+          <div>
+            <div className="text-white/40">Paid</div>
+            <div className="font-mono font-semibold">${card.cost.toFixed(2)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-white/40">Market</div>
+            <div className="font-mono font-semibold">
+              {card.marketValue ? `$${card.marketValue.toFixed(2)}` : "—"}
+            </div>
+          </div>
+          {pnl !== null && (
+            <div className="text-right">
+              <div className="text-white/40">P&L</div>
+              <div className={`font-mono font-semibold ${pnl >= 0 ? "text-good" : "text-bad"}`}>
+                {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
+                {pnlPct !== null && <span className="text-[10px] ml-1">({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(0)}%)</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <select
+            value={card.status}
+            onChange={(e) => onStatus(e.target.value as Card["status"])}
+            className="bg-ink border border-white/10 rounded-lg px-2 py-1 text-xs flex-1"
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            title="Refresh comps"
+            className="text-xs text-white/60 hover:text-accent disabled:opacity-40 px-2"
+          >
+            {refreshing ? "…" : "↻"}
+          </button>
+          <button
+            onClick={onDelete}
+            title="Delete"
+            className="text-xs text-white/40 hover:text-bad px-1"
+          >
+            ✕
+          </button>
+        </div>
+
+        {card.status === "sold" && (
+          <div className="pt-1">
+            <div className="label mb-1">Sold for</div>
+            <input
+              type="number"
+              step="0.01"
+              defaultValue={card.soldFor ?? ""}
+              onBlur={(e) => {
+                const v = e.target.value ? Number(e.target.value) : undefined;
+                if (v !== card.soldFor) onSoldFor(v);
+              }}
+              className="input text-sm"
+              placeholder="$"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BigStat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  tone?: "good" | "bad";
+}) {
   const color = tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : "";
   return (
-    <div className="card !p-3">
+    <div className="card !p-4">
       <div className="label">{label}</div>
-      <div className={`text-lg font-semibold mt-1 ${color}`}>{value}</div>
+      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
+      {sub && <div className="text-xs text-white/40 mt-1">{sub}</div>}
     </div>
   );
 }

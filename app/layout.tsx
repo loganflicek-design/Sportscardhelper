@@ -4,23 +4,25 @@ import type { ReactNode } from "react";
 
 export const metadata = {
   title: "Sports Card Helper",
-  description: "Comps, deal scoring, inventory, and listing drafts for sports card resellers.",
+  description: "Snap a card, get comps, score deals, manage inventory.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <header className="border-b border-white/5">
-          <nav className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4">
-            <Link href="/" className="font-bold text-lg">
+        <header className="border-b border-white/5 sticky top-0 bg-ink/80 backdrop-blur z-10">
+          <nav className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-4 overflow-x-auto">
+            <Link href="/" className="font-bold text-lg flex-shrink-0">
               <span className="text-accent">card</span>helper
             </Link>
-            <div className="flex gap-3 text-sm text-white/80">
-              <Link href="/scan" className="hover:text-white font-medium text-accent">📷 Scan</Link>
-              <Link href="/" className="hover:text-white">Comps & Deal</Link>
-              <Link href="/inventory" className="hover:text-white">Inventory</Link>
-              <Link href="/listing" className="hover:text-white">Listing Draft</Link>
+            <div className="flex gap-3 text-sm text-white/80 flex-shrink-0">
+              <NavLink href="/scan" highlight>📷 Scan</NavLink>
+              <NavLink href="/">Dashboard</NavLink>
+              <NavLink href="/inventory">Inventory</NavLink>
+              <NavLink href="/comps">Comps</NavLink>
+              <NavLink href="/listing">Listing</NavLink>
+              <NavLink href="/settings">Rules</NavLink>
             </div>
           </nav>
         </header>
@@ -30,5 +32,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </footer>
       </body>
     </html>
+  );
+}
+
+function NavLink({ href, children, highlight }: { href: string; children: ReactNode; highlight?: boolean }) {
+  return (
+    <Link href={href} className={`hover:text-white whitespace-nowrap ${highlight ? "text-accent font-medium" : ""}`}>
+      {children}
+    </Link>
   );
 }

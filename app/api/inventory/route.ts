@@ -15,6 +15,10 @@ export async function GET() {
     const net = (r.soldFor || 0) * (1 - feeRate) - fixedFee - shipping;
     return acc + (net - r.cost);
   }, 0);
+  const active = cards.filter((c) => c.status !== "sold");
+  const totalMarketValue = active.reduce((a, c) => a + (c.marketValue ?? 0), 0);
+  const activeCostBasis = active.reduce((a, c) => a + (c.cost || 0), 0);
+  const unrealized = +(totalMarketValue - activeCostBasis).toFixed(2);
   return NextResponse.json({
     cards,
     summary: {
@@ -23,6 +27,9 @@ export async function GET() {
       listed: cards.filter((c) => c.status === "listed").length,
       sold: sold.length,
       totalCostBasis: +totalCost.toFixed(2),
+      activeCostBasis: +activeCostBasis.toFixed(2),
+      totalMarketValue: +totalMarketValue.toFixed(2),
+      unrealizedProfit: unrealized,
       realizedProfit: +realized.toFixed(2),
     },
   });
@@ -31,6 +38,18 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   if (!body.title) return NextResponse.json({ error: "title required" }, { status: 400 });
-  const card = await addCard({ title: body.title, cost: Number(body.cost || 0), ...body });
+
+  let imageUrl: string | undefined = body.imageUrl;
+  if (body.imageBase64 && body.imageMimeType) {
+    // Store as data URL so it survives in the Sheet cell (≤ ~50KB after resize).
+    imageUrl = `data:${body.imageMimeType};base64,${body.imageBase64}`;
+  }
+
+  const card = await addCard({
+    ...body,
+    title: body.title,
+    cost: Number(body.cost || 0),
+    imageUrl,
+  });
   return NextResponse.json(card, { status: 201 });
 }

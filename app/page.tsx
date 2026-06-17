@@ -1,146 +1,153 @@
 "use client";
 
-import { useState } from "react";
-import type { CompsResult } from "@/lib/ebay";
-import type { DealResult } from "@/lib/fees";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import type { Card } from "@/lib/storage";
+
+type Summary = {
+  totalCards: number;
+  inHand: number;
+  listed: number;
+  sold: number;
+  totalCostBasis: number;
+  activeCostBasis: number;
+  totalMarketValue: number;
+  unrealizedProfit: number;
+  realizedProfit: number;
+};
 
 export default function HomePage() {
-  const [query, setQuery] = useState("");
-  const [comps, setComps] = useState<CompsResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
-  const [asking, setAsking] = useState("");
-  const [estimate, setEstimate] = useState("");
-  const [deal, setDeal] = useState<DealResult | null>(null);
+  useEffect(() => {
+    (async () => {
+      const r = await fetch("/api/inventory", { cache: "no-store" });
+      const d = await r.json();
+      setCards(d.cards);
+      setSummary(d.summary);
+      setLoaded(true);
+    })();
+  }, []);
 
-  async function runComps(e: React.FormEvent) {
-    e.preventDefault();
-    if (!query.trim()) return;
-    setLoading(true);
-    setError(null);
-    setComps(null);
-    try {
-      const res = await fetch(`/api/comps?q=${encodeURIComponent(query)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
-      setComps(data);
-      if (data.median) setEstimate(String(data.median));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const winners = [...cards]
+    .filter((c) => c.marketValue && c.cost && c.marketValue > c.cost && c.status !== "sold")
+    .sort((a, b) => (b.marketValue! - b.cost) - (a.marketValue! - a.cost))
+    .slice(0, 3);
 
-  async function runDeal(e: React.FormEvent) {
-    e.preventDefault();
-    const res = await fetch("/api/deal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ askingPrice: Number(asking), estimatedSalePrice: Number(estimate) }),
-    });
-    const data = await res.json();
-    if (res.ok) setDeal(data);
-  }
-
-  const verdictColor =
-    deal?.verdict === "BUY" ? "bg-good text-ink" : deal?.verdict === "MAYBE" ? "bg-warn text-ink" : "bg-bad text-ink";
+  const needsComps = cards.filter((c) => !c.marketValue && c.status !== "sold").slice(0, 5);
 
   return (
-    <div className="grid md:grid-cols-2 gap-6">
-      <section className="card">
-        <h2 className="text-xl font-semibold mb-3">1. Look up sold comps</h2>
-        <form onSubmit={runComps} className="flex gap-2">
-          <input
-            className="input"
-            placeholder='e.g. "2018 Optic Luka Doncic Rated Rookie PSA 10"'
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button className="btn" disabled={loading || !query.trim()}>
-            {loading ? "Searching…" : "Comp it"}
-          </button>
-        </form>
+    <div className="space-y-6">
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <ActionCard href="/scan" icon="📷" label="Scan a card" sub="ID + comps + save" primary />
+        <ActionCard href="/scan" icon="💰" label="Just price it" sub="Snap → see comps" />
+        <ActionCard href="/comps" icon="🔍" label="Manual comps" sub="Type a title" />
+        <ActionCard href="/inventory" icon="📦" label="Inventory" sub="Manage cards" />
+      </div>
 
-        {error && <p className="text-bad text-sm mt-3">{error}</p>}
+      {/* Portfolio overview */}
+      {summary && summary.totalCards > 0 && (
+        <section className="card">
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="text-lg font-semibold">Portfolio</h2>
+            <Link href="/inventory" className="text-xs text-accent hover:underline">View all →</Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Metric label="Cards" value={String(summary.totalCards)} />
+            <Metric label="Invested" value={`$${summary.activeCostBasis.toFixed(0)}`} />
+            <Metric label="Market value" value={`$${summary.totalMarketValue.toFixed(0)}`} />
+            <Metric
+              label="Unrealized P&L"
+              value={`${summary.unrealizedProfit >= 0 ? "+" : ""}$${summary.unrealizedProfit.toFixed(0)}`}
+              tone={summary.unrealizedProfit >= 0 ? "good" : "bad"}
+            />
+          </div>
+        </section>
+      )}
 
-        {comps && comps.count > 0 && (
-          <div className="mt-5 space-y-4">
-            <div className="grid grid-cols-4 gap-3 text-center">
-              <Stat label="Median" value={`$${comps.median}`} highlight />
-              <Stat label="Mean" value={`$${comps.mean}`} />
-              <Stat label="Low" value={`$${comps.low}`} />
-              <Stat label="High" value={`$${comps.high}`} />
-            </div>
-            <p className="text-xs text-white/50">
-              {comps.count} sales · ±${comps.stdev} stdev
-            </p>
-            <ul className="max-h-72 overflow-auto divide-y divide-white/5 text-sm">
-              {comps.items.slice(0, 15).map((it, i) => (
-                <li key={i} className="py-2 flex gap-3 items-center">
-                  {it.image && (
+      {/* Top winners */}
+      {winners.length > 0 && (
+        <section className="card">
+          <h2 className="text-lg font-semibold mb-3">📈 Top movers</h2>
+          <ul className="divide-y divide-white/5">
+            {winners.map((c) => {
+              const pnl = c.marketValue! - c.cost;
+              const pct = (pnl / c.cost) * 100;
+              return (
+                <li key={c.id} className="py-2 flex items-center gap-3">
+                  {c.imageUrl && (
                     /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={it.image} alt="" className="w-12 h-12 object-cover rounded" />
+                    <img src={c.imageUrl} alt="" className="w-10 h-14 object-cover rounded" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <a href={it.url} target="_blank" rel="noreferrer" className="block truncate hover:text-accent">
-                      {it.title}
-                    </a>
-                    <div className="text-xs text-white/50">
-                      {it.condition || "—"} · {it.soldDate || "recent"}
-                    </div>
+                    <div className="text-sm truncate">{c.title}</div>
+                    <div className="text-xs text-white/40">Paid ${c.cost.toFixed(2)} · Now ${c.marketValue!.toFixed(2)}</div>
                   </div>
-                  <div className="font-mono">${it.totalPrice.toFixed(2)}</div>
+                  <div className="text-good font-mono text-sm font-semibold">
+                    +${pnl.toFixed(2)}
+                    <div className="text-[10px] opacity-70">+{pct.toFixed(0)}%</div>
+                  </div>
                 </li>
-              ))}
-            </ul>
-          </div>
-        )}
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
-        {comps && comps.count === 0 && (
-          <p className="mt-4 text-white/60 text-sm">No sold listings found. Try a broader search.</p>
-        )}
-      </section>
+      {/* Needs comps */}
+      {needsComps.length > 0 && (
+        <section className="card">
+          <h2 className="text-lg font-semibold mb-2">⏳ Need market value</h2>
+          <p className="text-xs text-white/50 mb-3">These cards don't have comps yet. Pull them from the Inventory page.</p>
+          <ul className="space-y-1">
+            {needsComps.map((c) => (
+              <li key={c.id} className="text-sm flex items-center gap-2">
+                <span className="text-white/40">·</span>
+                <span className="truncate flex-1">{c.title}</span>
+              </li>
+            ))}
+          </ul>
+          <Link href="/inventory" className="btn-ghost text-xs mt-3 inline-block">Go to inventory</Link>
+        </section>
+      )}
 
-      <section className="card">
-        <h2 className="text-xl font-semibold mb-3">2. Score the deal</h2>
-        <form onSubmit={runDeal} className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="label">Asking price</div>
-            <input className="input" inputMode="decimal" value={asking} onChange={(e) => setAsking(e.target.value)} />
-          </div>
-          <div>
-            <div className="label">Est. sale price</div>
-            <input className="input" inputMode="decimal" value={estimate} onChange={(e) => setEstimate(e.target.value)} />
-          </div>
-          <button className="btn col-span-2" disabled={!asking || !estimate}>
-            Score it
-          </button>
-        </form>
-
-        {deal && (
-          <div className="mt-5 space-y-3">
-            <div className={`inline-block rounded-xl px-3 py-1 font-bold ${verdictColor}`}>{deal.verdict}</div>
-            <p className="text-sm text-white/80">{deal.reasoning}</p>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <Stat label="Net after fees" value={`$${deal.netProceeds.toFixed(2)}`} />
-              <Stat label="Profit" value={`$${deal.profit.toFixed(2)}`} highlight={deal.profit > 0} />
-              <Stat label="ROI" value={`${deal.roiPct}%`} />
-            </div>
-            <p className="text-xs text-white/40">Assumes 13.25% eBay fee + $0.30 fixed + $1.50 shipping. Adjust in API.</p>
-          </div>
-        )}
-      </section>
+      {/* Empty state */}
+      {loaded && summary?.totalCards === 0 && (
+        <section className="card text-center py-10 space-y-3">
+          <div className="text-4xl">👋</div>
+          <h2 className="text-xl font-bold">Welcome to your card stack</h2>
+          <p className="text-white/60 text-sm max-w-md mx-auto">
+            Start by scanning a card. The AI will identify it, pull recent eBay comps, and tell you if it's a winner.
+          </p>
+          <Link href="/scan" className="btn inline-block mt-2">📷 Scan your first card</Link>
+        </section>
+      )}
     </div>
   );
 }
 
-function Stat({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+function ActionCard({ href, icon, label, sub, primary }: { href: string; icon: string; label: string; sub: string; primary?: boolean }) {
   return (
-    <div className={`rounded-xl border border-white/5 p-3 ${highlight ? "bg-accent/10" : "bg-ink"}`}>
+    <Link
+      href={href}
+      className={`card !p-4 hover:border-accent/40 transition-colors ${primary ? "ring-1 ring-accent/30 bg-accent/5" : ""}`}
+    >
+      <div className="text-2xl mb-2">{icon}</div>
+      <div className="font-semibold text-sm">{label}</div>
+      <div className="text-xs text-white/50 mt-0.5">{sub}</div>
+    </Link>
+  );
+}
+
+function Metric({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
+  const color = tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : "";
+  return (
+    <div>
       <div className="label">{label}</div>
-      <div className="text-lg font-semibold mt-1">{value}</div>
+      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
     </div>
   );
 }

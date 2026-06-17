@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { getComps, type UnifiedComps } from "@/lib/comps";
+import { scoreDeal, type DealResult } from "@/lib/fees";
+import type { Thresholds } from "@/lib/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +36,13 @@ export type ScanResult = {
   notes?: string;
 };
 
+export type ScanResponse = {
+  identified: ScanResult;
+  comps?: UnifiedComps;
+  compsError?: string;
+  deal?: DealResult;
+};
+
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -41,7 +51,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { imageBase64: string; mimeType: string };
+  let body: {
+    imageBase64: string;
+    mimeType: string;
+    cost?: number;
+    thresholds?: Partial<Thresholds>;
+    skipComps?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
@@ -60,6 +76,7 @@ export async function POST(req: NextRequest) {
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+  let identified: ScanResult;
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -81,13 +98,31 @@ export async function POST(req: NextRequest) {
         },
       ],
     });
-
     const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "";
     const jsonStr = raw.startsWith("{") ? raw : raw.replace(/^```json?\n?/, "").replace(/\n?```$/, "");
-    const identified: ScanResult = JSON.parse(jsonStr);
-    return NextResponse.json({ identified });
+    identified = JSON.parse(jsonStr);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `Card identification failed: ${msg}` }, { status: 500 });
   }
+
+  const out: ScanResponse = { identified };
+
+  if (!body.skipComps && identified.title) {
+    try {
+      const comps = await getComps(identified.title, 30);
+      out.comps = comps;
+      if (comps.median && body.cost && body.cost > 0) {
+        out.deal = scoreDeal({
+          askingPrice: body.cost,
+          estimatedSalePrice: comps.median,
+          thresholds: body.thresholds,
+        });
+      }
+    } catch (err) {
+      out.compsError = err instanceof Error ? err.message : "Comp lookup failed";
+    }
+  }
+
+  return NextResponse.json(out);
 }
