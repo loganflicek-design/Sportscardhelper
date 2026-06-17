@@ -17,6 +17,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <span className="text-accent">card</span>helper
             </Link>
             <div className="flex gap-3 text-sm text-white/80">
+              <Link href="/scan" className="hover:text-white font-medium text-accent">📷 Scan</Link>
               <Link href="/" className="hover:text-white">Comps & Deal</Link>
               <Link href="/inventory" className="hover:text-white">Inventory</Link>
               <Link href="/listing" className="hover:text-white">Listing Draft</Link>
