@@ -43,6 +43,7 @@ export default function HomePage() {
       {/* Quick actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <ActionCard href="/scan" icon="📷" label="Scan a card" sub="ID + comps + save" primary />
+        <ActionCard href="/batch" icon="📚" label="Batch Scan" sub="Upload many at once" />
         <ActionCard href="/show" icon="🏃" label="Card Show Mode" sub="Fast BUY/PASS at shows" />
         <ActionCard href="/comps" icon="🔍" label="Manual comps" sub="Type a title" />
         <ActionCard href="/inventory" icon="📦" label="Inventory" sub="Manage cards" />

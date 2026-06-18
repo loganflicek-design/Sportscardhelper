@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </Link>
             <div className="flex gap-3 text-sm text-white/80 flex-shrink-0">
               <NavLink href="/scan" highlight>📷 Scan</NavLink>
+              <NavLink href="/batch">📚 Batch</NavLink>
               <NavLink href="/show">🏃 Show Mode</NavLink>
               <NavLink href="/">Dashboard</NavLink>
               <NavLink href="/inventory">Inventory</NavLink>
