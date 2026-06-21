@@ -10,7 +10,8 @@ type Stage = "idle" | "preview" | "identifying" | "review" | "saving" | "saved";
 type Mode = "save" | "price-only";
 
 export default function ScanPage() {
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<Stage>("idle");
   const [mode, setMode] = useState<Mode>("save");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -28,7 +29,8 @@ export default function ScanPage() {
     setCost("");
     setScan(null);
     setError(null);
-    if (fileRef.current) fileRef.current.value = "";
+    if (cameraRef.current) cameraRef.current.value = "";
+    if (galleryRef.current) galleryRef.current.value = "";
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -142,19 +144,37 @@ export default function ScanPage() {
       )}
 
       {stage === "idle" && (
-        <div className="card text-center py-12">
-          <button onClick={() => fileRef.current?.click()} className="mx-auto flex flex-col items-center gap-3 group">
+        <div className="card text-center py-10 space-y-5">
+          <button onClick={() => cameraRef.current?.click()} className="mx-auto flex flex-col items-center gap-3 group">
             <div className="w-24 h-24 rounded-full bg-accent/10 border-2 border-accent/40 flex items-center justify-center group-hover:bg-accent/20 transition-colors">
               <CameraIcon />
             </div>
             <span className="text-accent font-semibold text-lg">Take a photo</span>
-            <span className="text-white/40 text-sm">or tap to choose from gallery</span>
+          </button>
+          <div className="flex items-center gap-3 max-w-[200px] mx-auto">
+            <div className="h-px flex-1 bg-white/10" />
+            <span className="text-xs text-white/30 uppercase tracking-wider">or</span>
+            <div className="h-px flex-1 bg-white/10" />
+          </div>
+          <button
+            onClick={() => galleryRef.current?.click()}
+            className="mx-auto flex items-center gap-2 text-sm text-white/70 hover:text-white border border-white/10 rounded-xl px-4 py-2.5"
+          >
+            <GalleryIcon />
+            Upload from camera roll
           </button>
           <input
-            ref={fileRef}
+            ref={cameraRef}
             type="file"
             accept="image/*"
             capture="environment"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
             className="hidden"
             onChange={handleFileChange}
           />
@@ -391,6 +411,14 @@ function CameraIcon() {
     <svg className="w-10 h-10 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.776 48.776 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+    </svg>
+  );
+}
+
+function GalleryIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
     </svg>
   );
 }
