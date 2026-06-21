@@ -72,16 +72,18 @@ export default function BatchScanPage() {
           setCards((prev) => prev.map((p) => (p.id === item.card.id ? { ...p, status: "id-failed", error: "Bad image" } : p)));
           continue;
         }
+        const full = item.prep.full;
+        const thumb = item.prep.thumb;
         setCards((prev) =>
-          prev.map((p) => (p.id === item.card.id ? { ...p, full: item.prep.full, thumb: item.prep.thumb, status: "identifying" } : p))
+          prev.map((p) => (p.id === item.card.id ? { ...p, full, thumb, status: "identifying" } : p))
         );
         try {
           const res = await fetch("/api/scan", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              imageBase64: item.prep.full.base64,
-              mimeType: item.prep.full.mimeType,
+              imageBase64: full.base64,
+              mimeType: full.mimeType,
               thresholds,
               skipComps: false,
             }),
