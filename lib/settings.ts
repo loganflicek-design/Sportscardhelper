@@ -16,11 +16,11 @@ export type Thresholds = {
 };
 
 export const DEFAULT_THRESHOLDS: Thresholds = {
-  buyMinRoiPct: 40,
-  buyMinProfitDollars: 5,
-  maybeMinRoiPct: 20,
-  maybeMinProfitDollars: 3,
-  sellMarkupPct: 5,
+  buyMinRoiPct: 45,
+  buyMinProfitDollars: 7,
+  maybeMinRoiPct: 25,
+  maybeMinProfitDollars: 4,
+  sellMarkupPct: 8,
   feeRate: 0,
   fixedFee: 0,
   shippingCost: 5,

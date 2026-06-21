@@ -43,6 +43,26 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      <section className="card border border-accent/30 bg-accent/5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="label text-accent">📘 $200 Bankroll Playbook</div>
+            <h2 className="font-semibold text-white mt-0.5">Recommended starter settings</h2>
+          </div>
+          <button
+            onClick={() => setT(DEFAULT_THRESHOLDS)}
+            className="btn !py-1.5 !px-3 text-xs flex-shrink-0"
+          >
+            Apply
+          </button>
+        </div>
+        <p className="text-xs text-white/60 leading-relaxed">
+          Tuned for TikTok / Instagram primary sales with a small bankroll: 45% min ROI keeps you disciplined,
+          $7 min profit filters dead-end flips, 25% MAYBE threshold catches counter-offer candidates, 8%
+          sell markup moves cards fast on Live. Don't forget to <strong>Save</strong> after applying.
+        </p>
+      </section>
+
       <section className="card space-y-4">
         <h2 className="font-semibold text-white">When to Buy</h2>
         <p className="text-white/50 text-xs">A deal is marked <span className="text-good font-semibold">BUY</span> only if it clears these.</p>
