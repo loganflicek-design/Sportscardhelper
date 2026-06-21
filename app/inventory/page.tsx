@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Card } from "@/lib/storage";
-import { resizeImage } from "@/lib/image";
+import { resizeForSheetCell } from "@/lib/image";
 
 type Summary = {
   totalCards: number;
@@ -175,7 +175,7 @@ function CardTile({
     if (!file) return;
     setUploading(true);
     try {
-      const thumb = await resizeImage(file, 160, 0.65);
+      const thumb = await resizeForSheetCell(file);
       await onUpload(thumb.base64, thumb.mimeType);
     } finally {
       setUploading(false);

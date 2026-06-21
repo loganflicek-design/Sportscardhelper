@@ -8,7 +8,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const patch = { ...body };
   if (body.imageBase64 && body.imageMimeType) {
     const candidate = `data:${body.imageMimeType};base64,${body.imageBase64}`;
-    if (candidate.length <= 50000) patch.imageUrl = candidate;
+    if (candidate.length <= 49500) patch.imageUrl = candidate;
     delete patch.imageBase64;
     delete patch.imageMimeType;
   }

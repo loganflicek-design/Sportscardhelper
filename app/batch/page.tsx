@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import type { ScanResponse } from "@/app/api/scan/route";
 import { loadThresholds } from "@/lib/client-settings";
-import { resizeImage } from "@/lib/image";
+import { resizeImage, resizeForSheetCell } from "@/lib/image";
 
 type CardState = {
   id: string;
@@ -50,7 +50,7 @@ export default function BatchScanPage() {
     const prepared = await Promise.all(
       files.map(async (f) => {
         try {
-          const [full, thumb] = await Promise.all([resizeImage(f, 1280), resizeImage(f, 160, 0.65)]);
+          const [full, thumb] = await Promise.all([resizeImage(f, 1280), resizeForSheetCell(f)]);
           return { ok: true as const, full: { base64: full.base64, mimeType: full.mimeType }, thumb };
         } catch {
           return { ok: false as const };

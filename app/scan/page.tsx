@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import type { ScanResult, ScanResponse } from "@/app/api/scan/route";
 import { loadThresholds } from "@/lib/client-settings";
-import { resizeImage } from "@/lib/image";
+import { resizeImage, resizeForSheetCell } from "@/lib/image";
 
 type Stage = "idle" | "preview" | "identifying" | "review" | "saving" | "saved";
 type Mode = "save" | "price-only";
@@ -42,7 +42,7 @@ export default function ScanPage() {
     try {
       const [full, thumb] = await Promise.all([
         resizeImage(file, 1280),
-        resizeImage(file, 160, 0.65),
+        resizeForSheetCell(file),
       ]);
       setFullImage({ base64: full.base64, mimeType: full.mimeType });
       setThumbImage(thumb);

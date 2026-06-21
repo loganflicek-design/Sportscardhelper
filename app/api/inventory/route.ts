@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   if (body.imageBase64 && body.imageMimeType) {
     const candidate = `data:${body.imageMimeType};base64,${body.imageBase64}`;
     // Google Sheets cells cap at 50,000 chars — drop the image rather than failing.
-    if (candidate.length <= 50000) imageUrl = candidate;
+    if (candidate.length <= 49500) imageUrl = candidate;
   }
 
   const card = await addCard({
