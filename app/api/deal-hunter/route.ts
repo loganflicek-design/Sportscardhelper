@@ -92,8 +92,9 @@ export async function POST(req: NextRequest) {
           const estimatedSellPrice = comps.median ?? 0;
           if (!estimatedSellPrice) return;
 
+          const taxAmount = +(c.buyPrice * (settings.salesTaxPct / 100)).toFixed(2);
           const result = scoreDeal({
-            askingPrice: c.buyPrice + c.shipping,
+            askingPrice: c.buyPrice + c.shipping + taxAmount,
             estimatedSalePrice: estimatedSellPrice,
             shippingChargedToBuyer: fees.shippingCost,
             thresholds: {
@@ -112,7 +113,8 @@ export async function POST(req: NextRequest) {
             title: c.title,
             buyPrice: c.buyPrice,
             shipping: c.shipping,
-            totalCost: +(c.buyPrice + c.shipping).toFixed(2),
+            tax: taxAmount,
+            totalCost: +(c.buyPrice + c.shipping + taxAmount).toFixed(2),
             estimatedSellPrice,
             profit: result.profit,
             roiPct: result.roiPct,

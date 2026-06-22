@@ -8,6 +8,7 @@ export type HuntSettings = {
   sports: string[];
   keywords: string[];
   sellPlatform: string;
+  salesTaxPct: number;
   updatedAt: string;
 };
 
@@ -17,6 +18,7 @@ export type FoundDeal = {
   title: string;
   buyPrice: number;
   shipping: number;
+  tax: number;
   totalCost: number;
   estimatedSellPrice: number;
   profit: number;
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: HuntSettings = {
   sports: ["baseball", "basketball", "football"],
   keywords: [],
   sellPlatform: "tiktok_ig_cash",
+  salesTaxPct: 5,
   updatedAt: new Date().toISOString(),
 };
 

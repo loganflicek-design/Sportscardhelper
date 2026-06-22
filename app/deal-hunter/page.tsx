@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: HuntSettings = {
   sports: ["baseball", "basketball", "football"],
   keywords: [],
   sellPlatform: "tiktok_ig_cash",
+  salesTaxPct: 5,
   updatedAt: "",
 };
 
@@ -153,6 +154,21 @@ export default function DealHunterPage() {
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Sales tax */}
+            <div>
+              <div className="label mb-1">Your state's sales tax (charged by eBay at checkout)</div>
+              <div className="relative max-w-xs">
+                <input
+                  className="input pr-8"
+                  inputMode="decimal"
+                  value={settings.salesTaxPct ?? 5}
+                  onChange={(e) => setSettings((s) => ({ ...s, salesTaxPct: Number(e.target.value) || 0 }))}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50">%</span>
+              </div>
+              <p className="text-xs text-white/40 mt-1">Wisconsin = 5%. Added to your buy cost automatically on every deal.</p>
             </div>
 
             {/* Min profit */}
@@ -354,8 +370,9 @@ function DealCard({ deal, onDismiss }: { deal: FoundDeal; onDismiss: (id: string
         {/* Numbers */}
         <div className="grid grid-cols-3 gap-1 text-xs">
           <div>
-            <div className="text-white/40">Buy</div>
+            <div className="text-white/40">You pay</div>
             <div className="font-mono font-semibold">${deal.totalCost.toFixed(2)}</div>
+            {deal.tax > 0 && <div className="text-[10px] text-white/30">incl. ${deal.tax.toFixed(2)} tax</div>}
           </div>
           <div>
             <div className="text-white/40">Sell est.</div>
@@ -367,7 +384,7 @@ function DealCard({ deal, onDismiss }: { deal: FoundDeal; onDismiss: (id: string
           </div>
         </div>
 
-        <div className="text-xs text-white/30 font-mono">{deal.roiPct}% ROI</div>
+        <div className="text-xs text-white/30 font-mono">{deal.roiPct}% ROI after tax &amp; fees</div>
 
         <div className="flex gap-2 pt-1 mt-auto">
           <a
