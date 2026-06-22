@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { Card } from "@/lib/storage";
-import { resizeForSheetCell } from "@/lib/image";
+import { uploadThumbnail, type ImagePayload } from "@/lib/upload-image";
 
 type Summary = {
   totalCards: number;
@@ -132,11 +132,11 @@ export default function InventoryPage() {
               onSoldFor={(v) => updateRow(c.id, { soldFor: v, soldAt: v ? new Date().toISOString().slice(0, 10) : undefined })}
               onRefresh={() => refreshComps(c)}
               onDelete={() => remove(c.id)}
-              onUpload={async (base64, mimeType) => {
+              onUpload={async (img) => {
                 await fetch(`/api/inventory/${c.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ imageBase64: base64, imageMimeType: mimeType }),
+                  body: JSON.stringify(img),
                 });
                 load();
               }}
@@ -163,7 +163,7 @@ function CardTile({
   onSoldFor: (v: number | undefined) => void;
   onRefresh: () => void;
   onDelete: () => void;
-  onUpload: (base64: string, mimeType: string) => Promise<void>;
+  onUpload: (img: ImagePayload) => Promise<void>;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -175,8 +175,8 @@ function CardTile({
     if (!file) return;
     setUploading(true);
     try {
-      const thumb = await resizeForSheetCell(file);
-      await onUpload(thumb.base64, thumb.mimeType);
+      const img = await uploadThumbnail(file);
+      await onUpload(img);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";

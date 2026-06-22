@@ -4,13 +4,14 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import type { ScanResponse } from "@/app/api/scan/route";
 import { loadThresholds } from "@/lib/client-settings";
-import { resizeImage, resizeForSheetCell } from "@/lib/image";
+import { resizeImage } from "@/lib/image";
+import { uploadThumbnail } from "@/lib/upload-image";
 
 type CardState = {
   id: string;
   previewUrl: string;
   full: { base64: string; mimeType: string } | null;
-  thumb: { base64: string; mimeType: string; dataUrl: string } | null;
+  file: File | null;
   status: "queued" | "identifying" | "identified" | "id-failed" | "saving" | "saved" | "save-failed" | "skipped";
   scan: ScanResponse | null;
   cost: string;
@@ -37,7 +38,7 @@ export default function BatchScanPage() {
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       previewUrl: URL.createObjectURL(f),
       full: null,
-      thumb: null,
+      file: f,
       status: "queued",
       scan: null,
       cost: "",
@@ -50,8 +51,8 @@ export default function BatchScanPage() {
     const prepared = await Promise.all(
       files.map(async (f) => {
         try {
-          const [full, thumb] = await Promise.all([resizeImage(f, 1280), resizeForSheetCell(f)]);
-          return { ok: true as const, full: { base64: full.base64, mimeType: full.mimeType }, thumb };
+          const full = await resizeImage(f, 1280);
+          return { ok: true as const, full: { base64: full.base64, mimeType: full.mimeType } };
         } catch {
           return { ok: false as const };
         }
@@ -73,9 +74,8 @@ export default function BatchScanPage() {
           continue;
         }
         const full = item.prep.full;
-        const thumb = item.prep.thumb;
         setCards((prev) =>
-          prev.map((p) => (p.id === item.card.id ? { ...p, full, thumb, status: "identifying" } : p))
+          prev.map((p) => (p.id === item.card.id ? { ...p, full, status: "identifying" } : p))
         );
         try {
           const res = await fetch("/api/scan", {
@@ -129,9 +129,9 @@ export default function BatchScanPage() {
       marketValue: card.scan.comps?.median ?? undefined,
       marketValueAt: card.scan.comps?.median ? new Date().toISOString().slice(0, 10) : undefined,
     };
-    if (card.thumb) {
-      payload.imageBase64 = card.thumb.base64;
-      payload.imageMimeType = card.thumb.mimeType;
+    if (card.file) {
+      const img = await uploadThumbnail(card.file);
+      Object.assign(payload, img);
     }
     const res = await fetch("/api/inventory", {
       method: "POST",

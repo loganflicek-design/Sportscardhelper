@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import type { ScanResult, ScanResponse } from "@/app/api/scan/route";
 import { loadThresholds } from "@/lib/client-settings";
-import { resizeImage, resizeForSheetCell } from "@/lib/image";
+import { resizeImage } from "@/lib/image";
+import { uploadThumbnail } from "@/lib/upload-image";
 
 type Stage = "idle" | "preview" | "identifying" | "review" | "saving" | "saved";
 type Mode = "save" | "price-only";
@@ -16,7 +17,7 @@ export default function ScanPage() {
   const [mode, setMode] = useState<Mode>("save");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fullImage, setFullImage] = useState<{ base64: string; mimeType: string } | null>(null);
-  const [thumbImage, setThumbImage] = useState<{ base64: string; mimeType: string; dataUrl: string } | null>(null);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
   const [cost, setCost] = useState("");
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +26,7 @@ export default function ScanPage() {
     setStage("idle");
     setPreviewUrl(null);
     setFullImage(null);
-    setThumbImage(null);
+    setPickedFile(null);
     setCost("");
     setScan(null);
     setError(null);
@@ -40,12 +41,9 @@ export default function ScanPage() {
     setPreviewUrl(URL.createObjectURL(file));
     setStage("preview");
     try {
-      const [full, thumb] = await Promise.all([
-        resizeImage(file, 1280),
-        resizeForSheetCell(file),
-      ]);
+      const full = await resizeImage(file, 1280);
       setFullImage({ base64: full.base64, mimeType: full.mimeType });
-      setThumbImage(thumb);
+      setPickedFile(file);
     } catch {
       setError("Could not process that image. Try a different photo.");
     }
@@ -99,9 +97,9 @@ export default function ScanPage() {
         marketValue: scan.comps?.median ?? undefined,
         marketValueAt: scan.comps?.median ? new Date().toISOString().slice(0, 10) : undefined,
       };
-      if (thumbImage) {
-        payload.imageBase64 = thumbImage.base64;
-        payload.imageMimeType = thumbImage.mimeType;
+      if (pickedFile) {
+        const img = await uploadThumbnail(pickedFile);
+        Object.assign(payload, img);
       }
       const res = await fetch("/api/inventory", {
         method: "POST",
