@@ -16,7 +16,6 @@ import { PLATFORM_PRESETS } from "@/lib/settings";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET — load settings + current deals
 export async function GET() {
   return NextResponse.json({
     settings: loadHuntSettings(),
@@ -25,7 +24,6 @@ export async function GET() {
   });
 }
 
-// POST — update settings, run a scan, or dismiss a deal
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
@@ -46,9 +44,9 @@ export async function POST(req: NextRequest) {
     }
 
     const settings = loadHuntSettings();
-    const ebayFees = PLATFORM_PRESETS.ebay;
+    const platformKey = (settings.sellPlatform ?? "tiktok_ig_cash") as keyof typeof PLATFORM_PRESETS;
+    const fees = PLATFORM_PRESETS[platformKey] ?? PLATFORM_PRESETS.tiktok_ig_cash;
 
-    // Build search queries from sports + custom keywords
     const queries: string[] = [];
     for (const sport of settings.sports) {
       queries.push(`${sport} card rookie`);
@@ -60,7 +58,10 @@ export async function POST(req: NextRequest) {
     }
 
     const seen = new Set<string>();
-    const candidates: Array<{ itemId: string; title: string; buyPrice: number; shipping: number; url: string; image?: string; condition?: string; endsAt?: string }> = [];
+    const candidates: Array<{
+      itemId: string; title: string; buyPrice: number; shipping: number;
+      url: string; image?: string; condition?: string; endsAt?: string;
+    }> = [];
 
     await Promise.allSettled(
       queries.map(async (q) => {
@@ -83,7 +84,6 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // Score each candidate
     const deals: FoundDeal[] = [];
     await Promise.allSettled(
       candidates.map(async (c) => {
@@ -95,11 +95,11 @@ export async function POST(req: NextRequest) {
           const result = scoreDeal({
             askingPrice: c.buyPrice + c.shipping,
             estimatedSalePrice: estimatedSellPrice,
-            shippingChargedToBuyer: 4.5,
+            shippingChargedToBuyer: fees.shippingCost,
             thresholds: {
-              feeRate: ebayFees.feeRate,
-              fixedFee: ebayFees.fixedFee,
-              shippingCost: ebayFees.shippingCost,
+              feeRate: fees.feeRate,
+              fixedFee: fees.fixedFee,
+              shippingCost: fees.shippingCost,
             },
           });
 
@@ -129,7 +129,6 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    // Merge with existing deals (dedupe by itemId, prefer fresh)
     const existing = loadDeals().filter((d) => !deals.some((n) => n.itemId === d.itemId));
     const merged = [...deals, ...existing].sort((a, b) => b.profit - a.profit);
     saveDeals(merged);

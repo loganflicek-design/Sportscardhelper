@@ -7,6 +7,7 @@ export type HuntSettings = {
   minProfit: number;
   sports: string[];
   keywords: string[];
+  sellPlatform: string;
   updatedAt: string;
 };
 
@@ -35,6 +36,7 @@ export const DEFAULT_SETTINGS: HuntSettings = {
   minProfit: 10,
   sports: ["baseball", "basketball", "football"],
   keywords: [],
+  sellPlatform: "tiktok_ig_cash",
   updatedAt: new Date().toISOString(),
 };
 

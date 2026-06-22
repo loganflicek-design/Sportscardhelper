@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: HuntSettings = {
   minProfit: 10,
   sports: ["baseball", "basketball", "football"],
   keywords: [],
+  sellPlatform: "tiktok_ig_cash",
   updatedAt: "",
 };
 
@@ -217,6 +218,24 @@ export default function DealHunterPage() {
               </p>
             </div>
 
+            {/* Sell platform */}
+            <div>
+              <div className="label mb-1">Where you sell (affects profit calc)</div>
+              <select
+                className="bg-ink border border-white/10 rounded-lg px-3 py-2 text-sm w-full"
+                value={settings.sellPlatform ?? "tiktok_ig_cash"}
+                onChange={(e) => setSettings((s) => ({ ...s, sellPlatform: e.target.value }))}
+              >
+                <option value="tiktok_ig_cash">TikTok Live / Cash App / Venmo (0% fee)</option>
+                <option value="instagram_paypal">PayPal Goods &amp; Services (3.49% + $0.49)</option>
+                <option value="tiktok_shop">TikTok Shop (8% + $0.30)</option>
+                <option value="ebay">eBay (13.25% + $0.30)</option>
+              </select>
+              <p className="text-xs text-white/40 mt-1">
+                Cash App personal &amp; PayPal F&amp;F = 0% but no buyer protection. PayPal G&amp;S = small fee but safer.
+              </p>
+            </div>
+
             <div className="flex gap-3 pt-1">
               <button
                 className="btn flex-1 py-3 text-base"
@@ -291,7 +310,7 @@ export default function DealHunterPage() {
       {/* How it works */}
       <section className="card bg-white/[0.02] space-y-2 text-xs text-white/50">
         <h3 className="font-semibold text-sm text-white/70">How the math works</h3>
-        <p>Buy price + shipping in → sell on eBay → subtract 13.25% fee + $0.30 + $1.50 shipping out = your profit. Only deals above your minimum show up.</p>
+        <p>Buy price + shipping in → sell on your platform → subtract your platform&apos;s fee + shipping out = your profit. Only deals above your minimum show up. TikTok Live + Cash App = near-zero fees, so your profits are much higher than selling on eBay.</p>
         <p className="text-white/30">Estimated sell price comes from recent eBay sold comps for that card. The better the card title on eBay, the more accurate the estimate.</p>
       </section>
     </div>
