@@ -47,7 +47,8 @@ export default function HomePage() {
         <ActionCard href="/show" icon="🏃" label="Card Show Mode" sub="Fast BUY/PASS at shows" />
         <ActionCard href="/comps" icon="🔍" label="Manual comps" sub="Type a title" />
         <ActionCard href="/inventory" icon="📦" label="Inventory" sub="Manage cards" />
-        <ActionCard href="/deal-hunter" icon="🔍" label="Deal Hunter" sub="Auto-find flips" primary />
+        <ActionCard href="/deal-check" icon="🔎" label="Check a Deal" sub="Screenshot → verdict" primary />
+        <ActionCard href="/deal-hunter" icon="🎯" label="Deal Hunter" sub="Auto-find flips" />
         <ActionCard href="/watchlist" icon="🎯" label="Watchlist" sub="Hunt for deals" />
         <ActionCard href="/grade" icon="⭐" label="Grade ROI" sub="Worth sending to PSA?" />
         <ActionCard href="/research" icon="📊" label="Player Research" sub="Find best plays" />

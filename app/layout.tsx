@@ -23,6 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <NavLink href="/">Dashboard</NavLink>
               <NavLink href="/inventory">Inventory</NavLink>
               <NavLink href="/comps">Comps</NavLink>
+              <NavLink href="/deal-check">🔎 Check a Deal</NavLink>
               <NavLink href="/deal-hunter" highlight>🎯 Deal Hunter</NavLink>
               <NavLink href="/watchlist">Watchlist</NavLink>
               <NavLink href="/grade">Grade ROI</NavLink>
