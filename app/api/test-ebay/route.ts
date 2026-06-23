@@ -1,24 +1,41 @@
 import { NextResponse } from "next/server";
-import { searchActiveByFindingApi, searchSoldByFindingApi } from "@/lib/ebay-api";
+import { searchActiveListings } from "@/lib/ebay-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const results: Record<string, unknown> = {};
+  const results: Record<string, unknown> = {
+    appId: process.env.EBAY_APP_ID ? `starts with: ${process.env.EBAY_APP_ID.slice(0, 12)}` : "NOT SET",
+    certId: process.env.EBAY_CERT_ID ? "set" : "NOT SET",
+  };
 
+  // Test Finding API raw response
   try {
-    const active = await searchActiveByFindingApi("baseball rookie PSA 10", { limit: 3 });
-    results.activeListings = { count: active.length, sample: active.slice(0, 2) };
+    const appId = process.env.EBAY_APP_ID!;
+    const base = "https://svcs.ebay.com/services/search/FindingService/v1";
+    const qs = [
+      `OPERATION-NAME=findItemsByKeywords`,
+      `SERVICE-VERSION=1.0.0`,
+      `SECURITY-APPNAME=${encodeURIComponent(appId)}`,
+      `RESPONSE-DATA-FORMAT=JSON`,
+      `keywords=baseball+rookie+PSA`,
+      `categoryId=212`,
+      `paginationInput.entriesPerPage=3`,
+    ].join("&");
+    const res = await fetch(`${base}?${qs}`, { cache: "no-store" });
+    const text = await res.text();
+    results.findingApi = { status: res.status, body: text.slice(0, 500) };
   } catch (e) {
-    results.activeListingsError = e instanceof Error ? e.message : String(e);
+    results.findingApiError = e instanceof Error ? e.message : String(e);
   }
 
+  // Test Browse API (OAuth)
   try {
-    const sold = await searchSoldByFindingApi("baseball rookie PSA 10", { limit: 3 });
-    results.soldListings = { count: sold.length, sample: sold.slice(0, 2) };
+    const active = await searchActiveListings("baseball rookie PSA 10", { limit: 3 });
+    results.browseApi = { count: active.length, sample: active[0] ?? null };
   } catch (e) {
-    results.soldListingsError = e instanceof Error ? e.message : String(e);
+    results.browseApiError = e instanceof Error ? e.message : String(e);
   }
 
   return NextResponse.json(results);
