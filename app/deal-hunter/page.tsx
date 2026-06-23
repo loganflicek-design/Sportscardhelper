@@ -281,9 +281,12 @@ export default function DealHunterPage() {
       )}
 
       {scanResult && (
-        <div className="card border-accent/30 bg-accent/5 text-sm">
+        <div className={`card text-sm ${scanResult.found > 0 ? "border-accent/30 bg-accent/5" : "border-white/10"}`}>
           Scanned <span className="font-semibold">{scanResult.scanned}</span> eBay listings →{" "}
-          found <span className="font-semibold text-accent">{scanResult.found}</span> deals that hit your profit goal.
+          {scanResult.found > 0
+            ? <><span className="font-semibold text-accent">{scanResult.found}</span> deals found that hit your profit goal.</>
+            : <span className="text-white/60">No deals found this time. Try adding specific player keywords or lowering your min profit.</span>
+          }
         </div>
       )}
 
