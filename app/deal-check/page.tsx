@@ -98,29 +98,36 @@ type EbayFilters = {
   extraSteps: string[];
 };
 
-// eBay URL params:
-// _sacat=212  Sports Trading Cards category
-// LH_Auction=1  auction only
-// LH_BIN=1  Buy It Now only
-// LH_TitleDesc=1  search title + description
-// _sop=12  sort: ending soonest
-// _sop=15  sort: price + shipping lowest first
-// _sop=10  sort: newly listed
-function buildEbayUrl(query: string, angle: Angle, misspelling?: string): string {
+// eBay sort values: 12=ending soonest, 15=price low→high, 10=newly listed
+// _udlo/_udhi = price low/high filter (keeps out $1 junk and $10k grails)
+function buildEbayUrl(
+  query: string,
+  angle: Angle,
+  grade: Grade,
+  misspelling?: string
+): string {
   const p = new URLSearchParams();
   p.set("_nkw", misspelling ?? query);
-  p.set("_sacat", "212");
+  p.set("_sacat", "212"); // Sports Trading Cards
+
+  // Price floor based on grade — filters out junk cards
+  const isGraded = Boolean(grade.keyword);
+  if (angle !== "lot") {
+    p.set("_udlo", isGraded ? "20" : "5");   // min price
+    p.set("_udhi", "500");                     // max price (skip grails)
+  }
+
   if (angle === "auction") {
     p.set("LH_Auction", "1");
-    p.set("_sop", "12");
+    p.set("_sop", "12"); // Ending soonest
   } else if (angle === "bin") {
     p.set("LH_BIN", "1");
-    p.set("LH_BO", "1"); // include Best Offer
-    p.set("_sop", "15");
+    p.set("LH_BO", "1");  // include Best Offer listings too
+    p.set("_sop", "15");  // Price lowest first
   } else if (angle === "misspelling") {
-    p.set("_sop", "10");
+    p.set("_sop", "10");  // Newly listed — catch fresh misspelled listings fast
   } else if (angle === "lot") {
-    p.set("LH_TitleDesc", "1");
+    p.set("LH_TitleDesc", "1"); // Search title + description
     p.set("_sop", "15");
   }
   return `https://www.ebay.com/sch/i.html?${p.toString()}`;
@@ -182,7 +189,7 @@ function buildSearch(
     };
   }
 
-  return { query, ebayUrl: buildEbayUrl(query, angle), filters };
+  return { query, ebayUrl: buildEbayUrl(query, angle, grade), filters };
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -211,7 +218,7 @@ type CheckResult = {
   outboundShipping: number;
   profit: number;
   roiPct: number;
-  verdict: "BUY" | "MAYBE" | "PASS";
+  verdict: "BUY" | "MAYBE" | "PASS" | "UNKNOWN";
   reasoning: string;
 };
 
@@ -281,14 +288,18 @@ export default function DealCheckPage() {
       const tax = +((price * taxPct) / 100).toFixed(2);
       const totalCost = +(price + shipping + tax).toFixed(2);
       const median = scanData.comps?.median ?? 0;
-      const platformFee = median > 0 ? +(median * platform.feeRate + platform.fixedFee).toFixed(2) : 0;
+      const hasComps = median > 0;
+      const platformFee = hasComps ? +(median * platform.feeRate + platform.fixedFee).toFixed(2) : 0;
       const outboundShipping = platform.shippingCost;
-      const profit = +(median - platformFee - outboundShipping - totalCost).toFixed(2);
-      const roiPct = totalCost > 0 ? +((profit / totalCost) * 100).toFixed(1) : 0;
+      const profit = hasComps ? +(median - platformFee - outboundShipping - totalCost).toFixed(2) : 0;
+      const roiPct = hasComps && totalCost > 0 ? +((profit / totalCost) * 100).toFixed(1) : 0;
 
-      let verdict: "BUY" | "MAYBE" | "PASS";
+      let verdict: "BUY" | "MAYBE" | "PASS" | "UNKNOWN";
       let reasoning: string;
-      if (profit >= 15 && roiPct >= 30) {
+      if (!hasComps) {
+        verdict = "UNKNOWN";
+        reasoning = "Couldn't pull sold comps — eBay is blocking our server. This will be fixed once the eBay API is approved. Card was identified correctly above.";
+      } else if (profit >= 15 && roiPct >= 30) {
         verdict = "BUY"; reasoning = `$${profit.toFixed(2)} profit at ${roiPct}% ROI — grab it.`;
       } else if (profit >= 8 && roiPct >= 15) {
         verdict = "MAYBE"; reasoning = `$${profit.toFixed(2)} profit at ${roiPct}% ROI — decent, only if you can move it fast.`;
@@ -388,7 +399,7 @@ export default function DealCheckPage() {
             {misspellings.map((m) => (
               <div key={m.search} className="flex gap-2">
                 <a
-                  href={buildEbayUrl(m.search, "misspelling")}
+                  href={buildEbayUrl(m.search, "misspelling", grade)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 hover:bg-accent/10 hover:border-accent/30 border border-white/5 transition-colors"
@@ -504,11 +515,14 @@ export default function DealCheckPage() {
             <div className={`rounded-xl border p-4 space-y-3 ${
               result.verdict === "BUY" ? "border-green-500/40 bg-green-500/10 text-green-400" :
               result.verdict === "MAYBE" ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-400" :
+              result.verdict === "UNKNOWN" ? "border-white/20 bg-white/5 text-white/70" :
               "border-red-500/40 bg-red-500/10 text-red-400"
             }`}>
               <div className="flex items-center justify-between">
-                <div className="text-3xl font-black">{result.verdict}</div>
-                {result.profit > 0 && (
+                <div className="text-3xl font-black">
+                  {result.verdict === "UNKNOWN" ? "?" : result.verdict}
+                </div>
+                {result.verdict !== "UNKNOWN" && result.profit > 0 && (
                   <div className="text-right">
                     <div className="text-xs opacity-60">Est. profit</div>
                     <div className="text-2xl font-bold">+${result.profit.toFixed(2)}</div>
@@ -516,24 +530,29 @@ export default function DealCheckPage() {
                 )}
               </div>
               <p className="text-sm opacity-90">{result.reasoning}</p>
+              {result.verdict === "UNKNOWN" && (
+                <p className="text-xs opacity-60">Card was identified correctly — check the details below. To get a profit verdict, the eBay API needs to be approved first.</p>
+              )}
             </div>
 
-            <div className="space-y-1 text-sm">
-              <Row label="Card price" value={`$${result.askingPrice.toFixed(2)}`} />
-              <Row label={`Shipping paid`} value={`$${Number(shippingPaid || 0).toFixed(2)}`} />
-              <Row label="WI sales tax (5%)" value={`$${result.tax.toFixed(2)}`} />
-              <div className="border-t border-white/10 pt-1.5 mt-1.5">
-                <Row label="Total you pay" value={`$${result.totalCost.toFixed(2)}`} bold />
+            {result.verdict !== "UNKNOWN" && (
+              <div className="space-y-1 text-sm">
+                <Row label="Card price" value={`$${result.askingPrice.toFixed(2)}`} />
+                <Row label="Shipping paid" value={`$${Number(shippingPaid || 0).toFixed(2)}`} />
+                <Row label="WI sales tax (5%)" value={`$${result.tax.toFixed(2)}`} />
+                <div className="border-t border-white/10 pt-1.5 mt-1.5">
+                  <Row label="Total you pay" value={`$${result.totalCost.toFixed(2)}`} bold />
+                </div>
+                <div className="border-t border-white/10 pt-1.5 mt-1.5 space-y-1">
+                  <Row label="Est. sell price (comps)" value={`$${result.estimatedSellPrice.toFixed(2)}`} />
+                  {result.platformFee > 0 && <Row label="Platform fee" value={`-$${result.platformFee.toFixed(2)}`} />}
+                  <Row label="Your shipping out" value={`-$${result.outboundShipping.toFixed(2)}`} />
+                </div>
+                <div className="border-t border-white/10 pt-1.5 mt-1.5">
+                  <Row label={`Profit (${result.roiPct}% ROI)`} value={`${result.profit >= 0 ? "+" : ""}$${result.profit.toFixed(2)}`} bold tone={result.profit > 0 ? "good" : "bad"} />
+                </div>
               </div>
-              <div className="border-t border-white/10 pt-1.5 mt-1.5 space-y-1">
-                <Row label="Est. sell price (comps)" value={result.estimatedSellPrice > 0 ? `$${result.estimatedSellPrice.toFixed(2)}` : "—"} />
-                {result.platformFee > 0 && <Row label="Platform fee" value={`-$${result.platformFee.toFixed(2)}`} />}
-                <Row label="Your shipping out" value={`-$${result.outboundShipping.toFixed(2)}`} />
-              </div>
-              <div className="border-t border-white/10 pt-1.5 mt-1.5">
-                <Row label={`Profit (${result.roiPct}% ROI)`} value={`${result.profit >= 0 ? "+" : ""}$${result.profit.toFixed(2)}`} bold tone={result.profit > 0 ? "good" : "bad"} />
-              </div>
-            </div>
+            )}
 
             {result.comps && result.comps.count > 0 && (
               <div className="grid grid-cols-4 gap-2 text-center">
