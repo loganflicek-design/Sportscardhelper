@@ -317,7 +317,7 @@ export default function DealHunterPage() {
         <div className="card text-center py-12 text-white/40">
           {ebayReady
             ? "Hit Scan to find deals. Results stay here between scans."
-            : "Deals will appear here once eBay API access is approved and you run your first scan."}
+            : "Hit Scan eBay Now to find your first deals."}
         </div>
       )}
 

@@ -43,7 +43,8 @@ export const DEFAULT_SETTINGS: HuntSettings = {
   updatedAt: new Date().toISOString(),
 };
 
-const DATA_DIR = path.join(process.cwd(), "data");
+// Use /tmp on Vercel (read-only filesystem) or local data/ dir otherwise
+const DATA_DIR = process.env.VERCEL ? "/tmp" : path.join(process.cwd(), "data");
 const SETTINGS_PATH = path.join(DATA_DIR, "deal-hunter-settings.json");
 const DEALS_PATH = path.join(DATA_DIR, "deal-hunter-results.json");
 
