@@ -121,19 +121,22 @@ export async function searchSoldByFindingApi(
   const appId = process.env.EBAY_APP_ID;
   if (!appId) throw new Error("EBAY_APP_ID not configured");
 
-  const url = new URL("https://svcs.ebay.com/services/search/FindingService/v1");
-  url.searchParams.set("OPERATION-NAME", "findCompletedItems");
-  url.searchParams.set("SERVICE-VERSION", "1.0.0");
-  url.searchParams.set("SECURITY-APPNAME", appId);
-  url.searchParams.set("RESPONSE-DATA-FORMAT", "JSON");
-  url.searchParams.set("keywords", query);
-  url.searchParams.set("categoryId", "212");
-  url.searchParams.set("itemFilter(0).name", "SoldItemsOnly");
-  url.searchParams.set("itemFilter(0).value", "true");
-  url.searchParams.set("paginationInput.entriesPerPage", String(Math.min(opts.limit ?? 50, 100)));
-  url.searchParams.set("sortOrder", "EndTimeSoonest");
+  // Build URL manually — URLSearchParams encodes parentheses which breaks Finding API filter names
+  const base = "https://svcs.ebay.com/services/search/FindingService/v1";
+  const qs = [
+    `OPERATION-NAME=findCompletedItems`,
+    `SERVICE-VERSION=1.0.0`,
+    `SECURITY-APPNAME=${encodeURIComponent(appId)}`,
+    `RESPONSE-DATA-FORMAT=JSON`,
+    `keywords=${encodeURIComponent(query)}`,
+    `categoryId=212`,
+    `itemFilter(0).name=SoldItemsOnly`,
+    `itemFilter(0).value=true`,
+    `paginationInput.entriesPerPage=${Math.min(opts.limit ?? 50, 100)}`,
+    `sortOrder=EndTimeSoonest`,
+  ].join("&");
 
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await fetch(`${base}?${qs}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Finding API (sold) failed: ${res.status}`);
   const json = await res.json() as Record<string, unknown>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,22 +164,27 @@ export async function searchActiveByFindingApi(
   const appId = process.env.EBAY_APP_ID;
   if (!appId) throw new Error("EBAY_APP_ID not configured");
 
-  const url = new URL("https://svcs.ebay.com/services/search/FindingService/v1");
-  url.searchParams.set("OPERATION-NAME", "findItemsByKeywords");
-  url.searchParams.set("SERVICE-VERSION", "1.0.0");
-  url.searchParams.set("SECURITY-APPNAME", appId);
-  url.searchParams.set("RESPONSE-DATA-FORMAT", "JSON");
-  url.searchParams.set("keywords", query);
-  url.searchParams.set("categoryId", "212");
-  url.searchParams.set("paginationInput.entriesPerPage", String(Math.min(opts.limit ?? 50, 100)));
+  // Build URL manually — URLSearchParams encodes parentheses which breaks Finding API filter names
+  const base = "https://svcs.ebay.com/services/search/FindingService/v1";
+  const parts = [
+    `OPERATION-NAME=findItemsByKeywords`,
+    `SERVICE-VERSION=1.0.0`,
+    `SECURITY-APPNAME=${encodeURIComponent(appId)}`,
+    `RESPONSE-DATA-FORMAT=JSON`,
+    `keywords=${encodeURIComponent(query)}`,
+    `categoryId=212`,
+    `paginationInput.entriesPerPage=${Math.min(opts.limit ?? 50, 100)}`,
+  ];
   if (opts.maxPrice) {
-    url.searchParams.set("itemFilter(0).name", "MaxPrice");
-    url.searchParams.set("itemFilter(0).value", String(opts.maxPrice));
-    url.searchParams.set("itemFilter(0).paramName", "Currency");
-    url.searchParams.set("itemFilter(0).paramValue", "USD");
+    parts.push(
+      `itemFilter(0).name=MaxPrice`,
+      `itemFilter(0).value=${opts.maxPrice}`,
+      `itemFilter(0).paramName=Currency`,
+      `itemFilter(0).paramValue=USD`,
+    );
   }
 
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await fetch(`${base}?${parts.join("&")}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Finding API (active) failed: ${res.status}`);
   const json = await res.json() as Record<string, unknown>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

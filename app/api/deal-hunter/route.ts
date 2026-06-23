@@ -157,6 +157,11 @@ export async function POST(req: NextRequest) {
       scanned: candidates.length,
       found: deals.length,
       deals: merged.filter((d) => !d.dismissed),
+      debug: {
+        queriesRan: queries.length,
+        candidatesFound: candidates.length,
+        dealsAfterScoring: deals.length,
+      },
     });
   }
 
