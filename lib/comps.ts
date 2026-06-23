@@ -1,13 +1,22 @@
 import { fetchSoldComps, type CompsResult, type SoldComp } from "./ebay";
-import { hasEbayApiCredentials, searchActiveListings, searchSoldListings } from "./ebay-api";
+import {
+  hasEbayApiCredentials,
+  searchActiveListings,
+  searchActiveByFindingApi,
+  searchSoldByFindingApi,
+  searchSoldListings,
+} from "./ebay-api";
 
-export type CompSource = "marketplace-insights" | "browse-active" | "scraper";
+export type CompSource = "marketplace-insights" | "finding-api" | "browse-active" | "scraper";
 export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
 const ACTIVE_TO_SOLD_DISCOUNT = 0.9;
 
 export async function getComps(query: string, limit = 60): Promise<UnifiedComps> {
-  if (hasEbayApiCredentials()) {
+  const hasCredentials = hasEbayApiCredentials();
+
+  if (hasCredentials) {
+    // 1. Marketplace Insights (sold) — requires special eBay approval; most won't have it
     try {
       const sold = await searchSoldListings(query, { limit });
       if (sold.length) {
@@ -24,9 +33,35 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
         return { ...summarize(query, items), source: "marketplace-insights" };
       }
     } catch {
-      // Marketplace Insights not granted — fall through.
+      // Not granted — fall through.
     }
+  }
 
+  // 2. Finding API (sold) — requires only EBAY_APP_ID, no special approval
+  //    This is the primary path since Browse API Growth Check was denied.
+  if (process.env.EBAY_APP_ID) {
+    try {
+      const sold = await searchSoldByFindingApi(query, { limit });
+      if (sold.length) {
+        const items: SoldComp[] = sold.map((s) => ({
+          title: s.title,
+          price: s.price,
+          shipping: 0,
+          totalPrice: s.price,
+          soldDate: s.soldAt ?? null,
+          url: s.url,
+          image: s.image ?? null,
+          condition: s.condition ?? null,
+        }));
+        return { ...summarize(query, items), source: "finding-api" };
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  if (hasCredentials) {
+    // 3. Browse API (active) — Growth Check denied but standard limits may still work
     try {
       const active = await searchActiveListings(query, { limit });
       if (active.length) {
@@ -40,11 +75,10 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
           image: a.image ?? null,
           condition: a.condition ?? null,
         }));
-        const summary = summarize(query, items);
         return {
-          ...summary,
+          ...summarize(query, items),
           source: "browse-active",
-          note: `Sold-comp API not granted yet — using active-listing asking prices × ${ACTIVE_TO_SOLD_DISCOUNT} as estimated sell price.`,
+          note: `Using active-listing asking prices × ${ACTIVE_TO_SOLD_DISCOUNT} as estimated sell price.`,
         };
       }
     } catch {
@@ -52,6 +86,7 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
     }
   }
 
+  // 4. Last resort: scrape eBay sold page (blocks from Vercel datacenter IPs)
   const scraped = await fetchSoldComps(query, limit);
   return { ...scraped, source: "scraper" };
 }

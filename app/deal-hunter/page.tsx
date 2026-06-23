@@ -111,7 +111,7 @@ export default function DealHunterPage() {
         </div>
         {!ebayReady && (
           <span className="text-xs bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 rounded-lg px-3 py-1.5">
-            eBay API pending approval
+            EBAY_APP_ID not set
           </span>
         )}
       </div>
@@ -271,7 +271,7 @@ export default function DealHunterPage() {
 
             {!ebayReady && (
               <p className="text-xs text-yellow-400/70 text-center">
-                Scan activates once eBay API access is approved. Your settings are saved and ready to go.
+                Add <code className="bg-white/10 px-1 rounded">EBAY_APP_ID</code> to your Vercel environment variables to enable scanning.
               </p>
             )}
           </>

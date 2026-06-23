@@ -8,7 +8,7 @@ import {
   type HuntSettings,
   type FoundDeal,
 } from "@/lib/deal-hunter";
-import { searchActiveListings, hasEbayApiCredentials } from "@/lib/ebay-api";
+import { searchActiveListings, searchActiveByFindingApi } from "@/lib/ebay-api";
 import { getComps } from "@/lib/comps";
 import { scoreDeal } from "@/lib/fees";
 import { PLATFORM_PRESETS } from "@/lib/settings";
@@ -20,7 +20,7 @@ export async function GET() {
   return NextResponse.json({
     settings: loadHuntSettings(),
     deals: loadDeals().filter((d) => !d.dismissed),
-    ebayReady: hasEbayApiCredentials(),
+    ebayReady: Boolean(process.env.EBAY_APP_ID),
   });
 }
 
@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.action === "scan") {
-    if (!hasEbayApiCredentials()) {
-      return NextResponse.json({ error: "eBay API credentials not configured yet" }, { status: 503 });
+    if (!process.env.EBAY_APP_ID) {
+      return NextResponse.json({ error: "EBAY_APP_ID not configured. Add it to your Vercel environment variables." }, { status: 503 });
     }
 
     const settings = loadHuntSettings();
@@ -65,8 +65,11 @@ export async function POST(req: NextRequest) {
 
     await Promise.allSettled(
       queries.map(async (q) => {
-        const results = await searchActiveListings(q, { maxPrice: settings.maxBudget, limit: 30 });
-        for (const r of results) {
+        // Finding API doesn't require OAuth — works without Growth Check approval
+        let results = await searchActiveByFindingApi(q, { maxPrice: settings.maxBudget, limit: 30 }).catch(() => null);
+        // Fall back to Browse API if Finding API fails
+        if (!results) results = await searchActiveListings(q, { maxPrice: settings.maxBudget, limit: 30 }).catch(() => []);
+        for (const r of (results ?? [])) {
           if (seen.has(r.itemId)) continue;
           if (r.totalPrice < settings.minBudget || r.totalPrice > settings.maxBudget) continue;
           seen.add(r.itemId);

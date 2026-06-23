@@ -1,9 +1,11 @@
 /**
  * eBay official API client.
  *
- * - Browse API: search active listings (for finding deals on a watchlist)
- * - Marketplace Insights API: sold listings (gated; we use it if granted)
- * - Sell APIs: Inventory + Offer (for auto-listing)
+ * Finding API (svcs.ebay.com): sold + active listings via App ID only — no OAuth,
+ *   no special approval. Standard tier = 5,000 calls/day.
+ * Browse API (api.ebay.com/buy/browse): active listings — requires OAuth but was
+ *   denied Growth Check; may still work at standard limits.
+ * Marketplace Insights API: sold listings — gated, requires special approval.
  *
  * If EBAY_APP_ID / EBAY_CERT_ID aren't set, callers should fall back to
  * the scraper in lib/ebay.ts.
@@ -107,6 +109,96 @@ export type SoldListing = {
   url: string;
   image?: string;
 };
+
+/**
+ * Finding API — sold (completed) listings. Requires only EBAY_APP_ID.
+ * No OAuth, no special approval. Standard tier = 5,000 calls/day.
+ */
+export async function searchSoldByFindingApi(
+  query: string,
+  opts: { limit?: number } = {}
+): Promise<SoldListing[]> {
+  const appId = process.env.EBAY_APP_ID;
+  if (!appId) throw new Error("EBAY_APP_ID not configured");
+
+  const url = new URL("https://svcs.ebay.com/services/search/FindingService/v1");
+  url.searchParams.set("OPERATION-NAME", "findCompletedItems");
+  url.searchParams.set("SERVICE-VERSION", "1.0.0");
+  url.searchParams.set("SECURITY-APPNAME", appId);
+  url.searchParams.set("RESPONSE-DATA-FORMAT", "JSON");
+  url.searchParams.set("keywords", query);
+  url.searchParams.set("categoryId", "212");
+  url.searchParams.set("itemFilter(0).name", "SoldItemsOnly");
+  url.searchParams.set("itemFilter(0).value", "true");
+  url.searchParams.set("paginationInput.entriesPerPage", String(Math.min(opts.limit ?? 50, 100)));
+  url.searchParams.set("sortOrder", "EndTimeSoonest");
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) throw new Error(`Finding API (sold) failed: ${res.status}`);
+  const json = await res.json() as Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const items: any[] = (json?.findCompletedItemsResponse as any)?.[0]?.searchResult?.[0]?.item ?? [];
+
+  return items.map((it) => ({
+    itemId: it.itemId?.[0] ?? "",
+    title: it.title?.[0] ?? "",
+    price: parseFloat(it.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0"),
+    soldAt: it.listingInfo?.[0]?.endTime?.[0] ?? undefined,
+    condition: it.condition?.[0]?.conditionDisplayName?.[0] ?? undefined,
+    url: it.viewItemURL?.[0] ?? "",
+    image: it.galleryURL?.[0] ?? undefined,
+  }));
+}
+
+/**
+ * Finding API — active listings. Requires only EBAY_APP_ID.
+ * No OAuth, no special approval.
+ */
+export async function searchActiveByFindingApi(
+  query: string,
+  opts: { limit?: number; maxPrice?: number } = {}
+): Promise<ActiveListing[]> {
+  const appId = process.env.EBAY_APP_ID;
+  if (!appId) throw new Error("EBAY_APP_ID not configured");
+
+  const url = new URL("https://svcs.ebay.com/services/search/FindingService/v1");
+  url.searchParams.set("OPERATION-NAME", "findItemsByKeywords");
+  url.searchParams.set("SERVICE-VERSION", "1.0.0");
+  url.searchParams.set("SECURITY-APPNAME", appId);
+  url.searchParams.set("RESPONSE-DATA-FORMAT", "JSON");
+  url.searchParams.set("keywords", query);
+  url.searchParams.set("categoryId", "212");
+  url.searchParams.set("paginationInput.entriesPerPage", String(Math.min(opts.limit ?? 50, 100)));
+  if (opts.maxPrice) {
+    url.searchParams.set("itemFilter(0).name", "MaxPrice");
+    url.searchParams.set("itemFilter(0).value", String(opts.maxPrice));
+    url.searchParams.set("itemFilter(0).paramName", "Currency");
+    url.searchParams.set("itemFilter(0).paramValue", "USD");
+  }
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) throw new Error(`Finding API (active) failed: ${res.status}`);
+  const json = await res.json() as Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const items: any[] = (json?.findItemsByKeywordsResponse as any)?.[0]?.searchResult?.[0]?.item ?? [];
+
+  return items.map((it) => {
+    const price = parseFloat(it.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0");
+    const shipping = parseFloat(it.shippingInfo?.[0]?.shippingServiceCost?.[0]?.__value__ ?? "0");
+    return {
+      itemId: it.itemId?.[0] ?? "",
+      title: it.title?.[0] ?? "",
+      price,
+      shipping,
+      totalPrice: +(price + shipping).toFixed(2),
+      condition: it.condition?.[0]?.conditionDisplayName?.[0] ?? undefined,
+      url: it.viewItemURL?.[0] ?? "",
+      image: it.galleryURL?.[0] ?? undefined,
+      seller: it.sellerInfo?.[0]?.sellerUserName?.[0] ?? undefined,
+      endsAt: it.listingInfo?.[0]?.endTime?.[0] ?? undefined,
+    };
+  });
+}
 
 /**
  * Marketplace Insights API — sold listings. Requires special approval from
