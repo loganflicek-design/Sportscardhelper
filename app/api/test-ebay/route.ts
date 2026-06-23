@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { searchActiveListings } from "@/lib/ebay-api";
 
+const HOST = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,15 @@ export async function GET() {
     results.browseApi = { count: active.length, sample: active[0] ?? null };
   } catch (e) {
     results.browseApiError = e instanceof Error ? e.message : String(e);
+  }
+
+  // Test edge scraper (Cloudflare IPs — may bypass eBay datacenter block)
+  try {
+    const r = await fetch(`${HOST}/api/comps-edge?q=Shohei+Ohtani+PSA+10+rookie`, { cache: "no-store" });
+    const data = await r.json();
+    results.edgeScraper = { status: r.status, count: data.count, median: data.median, error: data.error };
+  } catch (e) {
+    results.edgeScraperError = e instanceof Error ? e.message : String(e);
   }
 
   return NextResponse.json(results);

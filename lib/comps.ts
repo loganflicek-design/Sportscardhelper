@@ -7,61 +7,58 @@ import {
   searchSoldListings,
 } from "./ebay-api";
 
-export type CompSource = "marketplace-insights" | "finding-api" | "browse-active" | "scraper";
+export type CompSource = "marketplace-insights" | "finding-api" | "edge-scraper" | "browse-active" | "scraper";
 export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
 const ACTIVE_TO_SOLD_DISCOUNT = 0.9;
+const EDGE_COMPS_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}/api/comps-edge`
+  : "http://localhost:3000/api/comps-edge";
 
 export async function getComps(query: string, limit = 60): Promise<UnifiedComps> {
   const hasCredentials = hasEbayApiCredentials();
 
   if (hasCredentials) {
-    // 1. Marketplace Insights (sold) — requires special eBay approval; most won't have it
+    // 1. Marketplace Insights (sold) — requires special eBay approval
     try {
       const sold = await searchSoldListings(query, { limit });
       if (sold.length) {
         const items: SoldComp[] = sold.map((s) => ({
-          title: s.title,
-          price: s.price,
-          shipping: 0,
-          totalPrice: s.price,
-          soldDate: s.soldAt ?? null,
-          url: s.url,
-          image: s.image ?? null,
-          condition: s.condition ?? null,
+          title: s.title, price: s.price, shipping: 0, totalPrice: s.price,
+          soldDate: s.soldAt ?? null, url: s.url, image: s.image ?? null, condition: s.condition ?? null,
         }));
         return { ...summarize(query, items), source: "marketplace-insights" };
       }
-    } catch {
-      // Not granted — fall through.
-    }
+    } catch { /* not granted */ }
   }
 
-  // 2. Finding API (sold) — requires only EBAY_APP_ID, no special approval
-  //    This is the primary path since Browse API Growth Check was denied.
+  // 2. Finding API (sold) — App ID only, no OAuth needed
   if (process.env.EBAY_APP_ID) {
     try {
       const sold = await searchSoldByFindingApi(query, { limit });
       if (sold.length) {
         const items: SoldComp[] = sold.map((s) => ({
-          title: s.title,
-          price: s.price,
-          shipping: 0,
-          totalPrice: s.price,
-          soldDate: s.soldAt ?? null,
-          url: s.url,
-          image: s.image ?? null,
-          condition: s.condition ?? null,
+          title: s.title, price: s.price, shipping: 0, totalPrice: s.price,
+          soldDate: s.soldAt ?? null, url: s.url, image: s.image ?? null, condition: s.condition ?? null,
         }));
         return { ...summarize(query, items), source: "finding-api" };
       }
-    } catch {
-      // fall through
-    }
+    } catch { /* fall through */ }
   }
 
+  // 3. Edge scraper — runs on Cloudflare IPs, may bypass eBay's datacenter block
+  try {
+    const r = await fetch(`${EDGE_COMPS_URL}?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+    if (r.ok) {
+      const data = await r.json() as CompsResult & { error?: string };
+      if (!data.error && data.count > 0) {
+        return { ...data, source: "edge-scraper" };
+      }
+    }
+  } catch { /* fall through */ }
+
   if (hasCredentials) {
-    // 3. Browse API (active) — Growth Check denied but standard limits may still work
+    // 4. Browse API (active) × discount — least accurate, last API resort
     try {
       const active = await searchActiveListings(query, { limit });
       if (active.length) {
@@ -70,23 +67,17 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
           price: +(a.price * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
           shipping: +(a.shipping * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
           totalPrice: +(a.totalPrice * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
-          soldDate: null,
-          url: a.url,
-          image: a.image ?? null,
-          condition: a.condition ?? null,
+          soldDate: null, url: a.url, image: a.image ?? null, condition: a.condition ?? null,
         }));
         return {
-          ...summarize(query, items),
-          source: "browse-active",
-          note: `Using active-listing asking prices × ${ACTIVE_TO_SOLD_DISCOUNT} as estimated sell price.`,
+          ...summarize(query, items), source: "browse-active",
+          note: `Using active-listing prices × ${ACTIVE_TO_SOLD_DISCOUNT} — sold comps unavailable.`,
         };
       }
-    } catch {
-      // fall through to scraper as last resort
-    }
+    } catch { /* fall through */ }
   }
 
-  // 4. Last resort: scrape eBay sold page (blocks from Vercel datacenter IPs)
+  // 5. Direct scraper (likely 403 from Vercel serverless IPs)
   const scraped = await fetchSoldComps(query, limit);
   return { ...scraped, source: "scraper" };
 }
