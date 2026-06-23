@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { HuntSettings, FoundDeal } from "@/lib/deal-hunter";
+import { PLATFORM_PRESETS } from "@/lib/settings";
 
 const ALL_SPORTS = ["baseball", "basketball", "football", "hockey", "soccer"];
 
@@ -178,7 +179,14 @@ export default function DealHunterPage() {
                   onChange={(e) => setSettings((s) => ({ ...s, minProfit: Number(e.target.value) || 0 }))}
                 />
               </div>
-              <p className="text-xs text-white/40 mt-1">eBay takes 13.25% + $0.30 per sale. Shipping costs are factored in automatically.</p>
+              <p className="text-xs text-white/40 mt-1">
+                {(() => {
+                  const { feeRate, fixedFee } = PLATFORM_PRESETS[(settings.sellPlatform as keyof typeof PLATFORM_PRESETS) ?? "tiktok_ig_cash"] ?? PLATFORM_PRESETS.tiktok_ig_cash;
+                  return feeRate === 0
+                    ? "0% selling fees on your platform. Shipping factored in automatically."
+                    : `${(feeRate * 100).toFixed(2)}% + $${fixedFee.toFixed(2)} selling fee factored in automatically.`;
+                })()}
+              </p>
             </div>
 
             {/* Sports */}
