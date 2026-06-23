@@ -98,16 +98,43 @@ type EbayFilters = {
   extraSteps: string[];
 };
 
+// eBay URL params:
+// _sacat=212  Sports Trading Cards category
+// LH_Auction=1  auction only
+// LH_BIN=1  Buy It Now only
+// LH_TitleDesc=1  search title + description
+// _sop=12  sort: ending soonest
+// _sop=15  sort: price + shipping lowest first
+// _sop=10  sort: newly listed
+function buildEbayUrl(query: string, angle: Angle, misspelling?: string): string {
+  const p = new URLSearchParams();
+  p.set("_nkw", misspelling ?? query);
+  p.set("_sacat", "212");
+  if (angle === "auction") {
+    p.set("LH_Auction", "1");
+    p.set("_sop", "12");
+  } else if (angle === "bin") {
+    p.set("LH_BIN", "1");
+    p.set("LH_BO", "1"); // include Best Offer
+    p.set("_sop", "15");
+  } else if (angle === "misspelling") {
+    p.set("_sop", "10");
+  } else if (angle === "lot") {
+    p.set("LH_TitleDesc", "1");
+    p.set("_sop", "15");
+  }
+  return `https://www.ebay.com/sch/i.html?${p.toString()}`;
+}
+
 function buildSearch(
   sport: Sport,
   cardType: CardType,
   grade: Grade,
   angle: Angle
-): { query: string; filters: EbayFilters } | null {
+): { query: string; ebayUrl: string; filters: EbayFilters } | null {
   const sportLower = sport.toLowerCase();
 
   if (angle === "misspelling") {
-    // These have their own searches, handled separately
     return null;
   }
 
@@ -125,39 +152,37 @@ function buildSearch(
       sortBy: "Time: Ending Soonest",
       condition: grade.keyword ? "Graded" : "Near Mint or Better",
       extraSteps: [
-        "Set a max price based on your budget",
         "Look for listings with 0–2 bids ending in the next few hours",
-        "Check the sold comps before bidding so you know the ceiling",
+        "Check sold comps before bidding so you know the ceiling",
+        "Set a max price in eBay filters to stay in your budget",
       ],
     };
   } else if (angle === "bin") {
     query = parts.join(" ");
     filters = {
-      listingType: "Buy It Now",
+      listingType: "Buy It Now + Best Offer",
       sortBy: "Price + Shipping: Lowest First",
       condition: grade.keyword ? "Graded" : "Near Mint or Better",
       extraSteps: [
-        "Also check 'Best Offer' — sellers often accept 10–20% below asking",
-        "Set your max price to your budget and scroll for the lowest total",
-        "Skip anything with 0 photos or a blurry photo — hard to verify",
+        "Sellers often accept 10–20% below asking on Best Offer",
+        "Skip anything with 0 photos or a blurry photo",
+        "Sort by lowest price and work your way up",
       ],
     };
   } else {
-    // lot
     query = `${sportLower} card lot ${cardType.keyword}`.trim().replace(/\s+/g, " ");
     filters = {
       listingType: "All listings",
       sortBy: "Price + Shipping: Lowest First",
       extraSteps: [
-        "Search the description too: check 'Include description' in eBay filters",
-        "Look for lots where the seller clearly doesn't know values",
-        "Check every card in the lot photos — one PSA 10 RC can cover the whole lot price",
-        "Message the seller: 'Would you take $X?' for BIN lots",
+        "Title + description search is on — lots often say 'collection' not 'lot'",
+        "Check every card in the photos — one PSA 10 RC can cover the whole price",
+        "Message the seller to ask if they'd take a lower offer",
       ],
     };
   }
 
-  return { query, filters };
+  return { query, ebayUrl: buildEbayUrl(query, angle), filters };
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -358,57 +383,58 @@ export default function DealCheckPage() {
 
         {/* Generated output */}
         {angle === "misspelling" ? (
-          <div className="space-y-3">
-            <div className="label">Searches to try on eBay</div>
+          <div className="space-y-3 border-t border-white/5 pt-4">
+            <div className="label">Tap to open on eBay — newly listed, no filters</div>
             {misspellings.map((m) => (
-              <button
-                key={m.search}
-                onClick={() => copy(m.search)}
-                className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
-              >
-                <div>
-                  <div className="text-sm font-medium">{m.search}</div>
-                  <div className="text-[11px] text-white/40 mt-0.5">{m.note}</div>
-                </div>
-                <span className="text-[11px] text-accent/70 ml-3 flex-shrink-0">
-                  {copied === m.search ? "✓ copied" : "copy"}
-                </span>
-              </button>
+              <div key={m.search} className="flex gap-2">
+                <a
+                  href={buildEbayUrl(m.search, "misspelling")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 hover:bg-accent/10 hover:border-accent/30 border border-white/5 transition-colors"
+                >
+                  <div>
+                    <div className="text-sm font-medium">{m.search}</div>
+                    <div className="text-[11px] text-white/40 mt-0.5">{m.note}</div>
+                  </div>
+                  <span className="text-[11px] text-accent/60 ml-3 flex-shrink-0">Open →</span>
+                </a>
+                <button
+                  onClick={() => copy(m.search)}
+                  className="px-3 rounded-xl bg-white/5 border border-white/5 text-[11px] text-white/40 hover:text-white"
+                >
+                  {copied === m.search ? "✓" : "copy"}
+                </button>
+              </div>
             ))}
-            <p className="text-xs text-white/30">On eBay, leave autocorrect OFF and search exactly as written. Set no filters — misspelled listings show up in all categories.</p>
+            <p className="text-xs text-white/30">Leave autocorrect OFF before tapping — iOS/Android may auto-fix the misspelling.</p>
           </div>
         ) : generated ? (
           <div className="space-y-3 border-t border-white/5 pt-4">
-            {/* Search string */}
-            <div>
-              <div className="label mb-1.5">Search term — paste this into eBay</div>
-              <button
-                onClick={() => copy(generated.query)}
-                className="w-full text-left flex items-center justify-between px-4 py-3 rounded-xl bg-accent/10 border border-accent/30 hover:bg-accent/15 transition-colors"
-              >
-                <span className="font-mono text-sm text-accent">{generated.query}</span>
-                <span className="text-[11px] text-accent/60 ml-3 flex-shrink-0">
-                  {copied === generated.query ? "✓ copied" : "tap to copy"}
-                </span>
-              </button>
+            {/* Open on eBay — primary action */}
+            <a
+              href={generated.ebayUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn w-full py-3 text-base text-center block"
+            >
+              Open on eBay →
+            </a>
+            <p className="text-xs text-white/30 text-center -mt-1">Search is pre-filled, filters already set</p>
+
+            {/* Collapsible details */}
+            <div className="space-y-1.5">
+              <FilterRow icon="🔍" label="Search" value={generated.query} />
+              <FilterRow icon="📋" label="Listing type" value={generated.filters.listingType} />
+              <FilterRow icon="↕" label="Sort by" value={generated.filters.sortBy} />
+              {generated.filters.condition && (
+                <FilterRow icon="⭐" label="Condition" value={generated.filters.condition} />
+              )}
             </div>
 
-            {/* eBay filters */}
-            <div>
-              <div className="label mb-2">eBay filters to set</div>
-              <div className="space-y-1.5">
-                <FilterRow icon="📋" label="Listing type" value={generated.filters.listingType} />
-                <FilterRow icon="↕" label="Sort by" value={generated.filters.sortBy} />
-                {generated.filters.condition && (
-                  <FilterRow icon="⭐" label="Condition" value={generated.filters.condition} />
-                )}
-              </div>
-            </div>
-
-            {/* Extra tips */}
             {generated.filters.extraSteps.length > 0 && (
               <div className="bg-white/[0.03] rounded-xl p-3 space-y-1.5">
-                <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Tips for this angle</div>
+                <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Tips</div>
                 {generated.filters.extraSteps.map((step) => (
                   <div key={step} className="flex gap-2 text-xs text-white/60">
                     <span className="text-accent/60 flex-shrink-0">·</span>
