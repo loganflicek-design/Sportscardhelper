@@ -72,24 +72,35 @@ export async function POST(req: NextRequest) {
     }> = [];
 
     // Fetch candidates — 8 per query max, all queries in parallel
+    const searchErrors: string[] = [];
     await Promise.allSettled(
       queries.map(async (q) => {
-        let results = await searchActiveByFindingApi(q, { maxPrice: settings.maxBudget, limit: 8 }).catch(() => null);
-        if (!results) results = await searchActiveListings(q, { maxPrice: settings.maxBudget, limit: 8 }).catch(() => []);
-        for (const r of (results ?? [])) {
-          if (seen.has(r.itemId)) continue;
-          if (r.totalPrice < settings.minBudget || r.totalPrice > settings.maxBudget) continue;
-          seen.add(r.itemId);
-          candidates.push({
-            itemId: r.itemId,
-            title: r.title,
-            buyPrice: r.price,
-            shipping: r.shipping,
-            url: r.url,
-            image: r.image,
-            condition: r.condition,
-            endsAt: r.endsAt,
+        try {
+          let results = await searchActiveByFindingApi(q, { maxPrice: settings.maxBudget, limit: 8 }).catch((e) => {
+            searchErrors.push(`FindingAPI[${q}]: ${e.message}`);
+            return null;
           });
+          if (!results) results = await searchActiveListings(q, { maxPrice: settings.maxBudget, limit: 8 }).catch((e) => {
+            searchErrors.push(`BrowseAPI[${q}]: ${e.message}`);
+            return [];
+          });
+          for (const r of (results ?? [])) {
+            if (seen.has(r.itemId)) continue;
+            if (r.totalPrice < settings.minBudget || r.totalPrice > settings.maxBudget) continue;
+            seen.add(r.itemId);
+            candidates.push({
+              itemId: r.itemId,
+              title: r.title,
+              buyPrice: r.price,
+              shipping: r.shipping,
+              url: r.url,
+              image: r.image,
+              condition: r.condition,
+              endsAt: r.endsAt,
+            });
+          }
+        } catch (e) {
+          searchErrors.push(`Query[${q}]: ${e instanceof Error ? e.message : String(e)}`);
         }
       })
     );
@@ -161,6 +172,7 @@ export async function POST(req: NextRequest) {
         queriesRan: queries.length,
         candidatesFound: candidates.length,
         dealsAfterScoring: deals.length,
+        searchErrors: searchErrors.slice(0, 5),
       },
     });
   }
