@@ -109,11 +109,6 @@ export default function DealHunterPage() {
             Set your goals. Hit Scan. Buy the winners.
           </p>
         </div>
-        {!ebayReady && (
-          <span className="text-xs bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 rounded-lg px-3 py-1.5">
-            EBAY_APP_ID not set
-          </span>
-        )}
       </div>
 
       {/* Settings panel */}
@@ -256,7 +251,7 @@ export default function DealHunterPage() {
               <button
                 className="btn flex-1 py-3 text-base"
                 onClick={runScan}
-                disabled={scanning || !ebayReady}
+                disabled={scanning}
               >
                 {scanning ? "Scanning eBay…" : "🔍 Scan eBay Now"}
               </button>
@@ -269,11 +264,6 @@ export default function DealHunterPage() {
               </button>
             </div>
 
-            {!ebayReady && (
-              <p className="text-xs text-yellow-400/70 text-center">
-                Add <code className="bg-white/10 px-1 rounded">EBAY_APP_ID</code> to your Vercel environment variables to enable scanning.
-              </p>
-            )}
           </>
         )}
       </section>
