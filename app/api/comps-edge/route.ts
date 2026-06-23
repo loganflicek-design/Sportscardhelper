@@ -24,7 +24,9 @@ function decodeEntities(s: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const query = new URL(req.url).searchParams.get("q") ?? "";
+  const params = new URL(req.url).searchParams;
+  const query = params.get("q") ?? "";
+  const debug = params.get("debug") === "1";
   if (!query) return NextResponse.json({ error: "q param required" }, { status: 400 });
 
   const url = new URL("https://www.ebay.com/sch/i.html");
@@ -40,12 +42,14 @@ export async function GET(req: NextRequest) {
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
       "Cache-Control": "no-cache",
+      Referer: "https://www.ebay.com/",
       "Sec-Ch-Ua": '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
       "Sec-Ch-Ua-Mobile": "?0",
       "Sec-Ch-Ua-Platform": '"macOS"',
       "Sec-Fetch-Dest": "document",
       "Sec-Fetch-Mode": "navigate",
       "Sec-Fetch-Site": "none",
+      "Upgrade-Insecure-Requests": "1",
     },
     cache: "no-store",
   });
@@ -55,37 +59,49 @@ export async function GET(req: NextRequest) {
   }
 
   const html = await res.text();
+
   const items: Array<{
     title: string; price: number; shipping: number; totalPrice: number;
     soldDate: string | null; url: string; image: string | null; condition: string | null;
   }> = [];
 
-  const blocks = html.split('class="s-item__wrapper');
+  // eBay renders list items as <li class="s-item ..."> — split on that
+  const blocks = html.split(/<li[^>]+class="s-item[^"]*"/);
+
   for (const block of blocks.slice(1)) {
     if (items.length >= 40) break;
 
-    const titleMatch = block.match(/class="s-item__title"[^>]*>([\s\S]*?)<\/(?:span|div)>/);
+    // Title — spans and divs both used
+    const titleMatch = block.match(/class="s-item__title(?:\s[^"]*)?"\s*[^>]*>([\s\S]*?)<\/(?:span|div|h3)>/);
     let title = titleMatch ? decodeEntities(stripTags(titleMatch[1])) : "";
     if (!title || /shop on ebay/i.test(title)) continue;
 
+    // Price
     const priceMatch = block.match(/class="s-item__price"[^>]*>([\s\S]*?)<\/span>/);
     const priceText = priceMatch ? stripTags(priceMatch[1]) : "";
-    const price = parseMoney(priceText);
+    // Handle price ranges — take the lower bound
+    const prices_raw = priceText.match(/\$[\d,]+\.?\d*/g) ?? [];
+    const price = prices_raw.length ? parseMoney(prices_raw[0]) : 0;
     if (!price) continue;
 
+    // Shipping
     const shipMatch = block.match(/class="s-item__shipping[^"]*"[^>]*>([\s\S]*?)<\/span>/);
     const shippingText = shipMatch ? stripTags(shipMatch[1]) : "";
     const shipping = /free/i.test(shippingText) ? 0 : parseMoney(shippingText);
 
-    const dateMatch = block.match(/Sold[^<]*<\/span>\s*<span[^>]*>([^<]+)/);
+    // Sold date — eBay formats: "Sold  Sep 15, 2024" or "Sold Jan 5, 2025"
+    const dateMatch = block.match(/Sold\s+([A-Z][a-z]{2}\s+\d+,\s+\d{4})/);
     const soldDate = dateMatch ? dateMatch[1].trim() : null;
 
-    const urlMatch = block.match(/href="(https:\/\/www\.ebay\.com\/itm\/[^"]+)"/);
-    const itemUrl = urlMatch ? urlMatch[1].split("?")[0] : "";
+    // URL
+    const urlMatch = block.match(/href="(https:\/\/www\.ebay\.com\/itm\/[^"?]+)/);
+    const itemUrl = urlMatch ? urlMatch[1] : "";
 
+    // Image
     const imgMatch = block.match(/<img[^>]+src="(https:\/\/i\.ebayimg\.com\/[^"]+)"/);
     const image = imgMatch ? imgMatch[1] : null;
 
+    // Condition
     const condMatch = block.match(/class="SECONDARY_INFO"[^>]*>([^<]+)</);
     const condition = condMatch ? condMatch[1].trim() : null;
 
@@ -93,23 +109,32 @@ export async function GET(req: NextRequest) {
   }
 
   if (!items.length) {
-    return NextResponse.json({ error: "No sold listings found", html_snippet: html.slice(0, 200) });
+    // Return diagnostics to help debug
+    const hasItems = html.includes("s-item");
+    const hasWrapper = html.includes("s-item__wrapper");
+    const hasSold = html.includes("LH_Sold");
+    const snippet = html.slice(html.indexOf("s-item") > 0 ? html.indexOf("s-item") - 50 : 0, html.indexOf("s-item") + 500);
+    return NextResponse.json({
+      error: "No sold listings found",
+      diagnostics: { hasItems, hasWrapper, hasSold, blocksFound: blocks.length - 1 },
+      html_snippet: debug ? snippet : html.slice(0, 500),
+    });
   }
 
-  const prices = items.map((i) => i.totalPrice).filter((p) => p > 0).sort((a, b) => a - b);
-  const n = prices.length;
-  const mean = prices.reduce((a, b) => a + b, 0) / n;
-  const median = n % 2 ? prices[(n - 1) / 2] : (prices[n / 2 - 1] + prices[n / 2]) / 2;
-  const variance = prices.reduce((acc, p) => acc + (p - mean) ** 2, 0) / n;
+  const allPrices = items.map((i) => i.totalPrice).filter((p) => p > 0).sort((a, b) => a - b);
+  const n = allPrices.length;
+  const mean = allPrices.reduce((a, b) => a + b, 0) / n;
+  const median = n % 2 ? allPrices[(n - 1) / 2] : (allPrices[n / 2 - 1] + allPrices[n / 2]) / 2;
+  const variance = allPrices.reduce((acc, p) => acc + (p - mean) ** 2, 0) / n;
 
   return NextResponse.json({
     query,
     count: n,
     median: +median.toFixed(2),
     mean: +mean.toFixed(2),
-    low: prices[0],
-    high: prices[n - 1],
+    low: allPrices[0],
+    high: allPrices[n - 1],
     stdev: +Math.sqrt(variance).toFixed(2),
-    items,
+    items: debug ? items : items,
   });
 }
