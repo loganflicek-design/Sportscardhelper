@@ -43,8 +43,13 @@ export async function GET() {
   // Test edge scraper (Cloudflare IPs — may bypass eBay datacenter block)
   try {
     const r = await fetch(`${HOST}/api/comps-edge?q=Shohei+Ohtani+PSA+10+rookie`, { cache: "no-store" });
-    const data = await r.json();
-    results.edgeScraper = { status: r.status, count: data.count, median: data.median, error: data.error };
+    const text = await r.text();
+    try {
+      const data = JSON.parse(text) as Record<string, unknown>;
+      results.edgeScraper = { status: r.status, count: data.count, median: data.median, error: data.error };
+    } catch {
+      results.edgeScraper = { status: r.status, rawResponse: text.slice(0, 300) };
+    }
   } catch (e) {
     results.edgeScraperError = e instanceof Error ? e.message : String(e);
   }
