@@ -8,9 +8,10 @@ import {
 export type CompSource = "marketplace-insights" | "finding-api" | "130point" | "mavin" | "browse-active" | "scraper";
 export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
-// eBay's Finding API returns 503 from Vercel serverless (AWS IPs).
-// The edge route calls Finding API from Cloudflare IPs which may not be blocked.
-const ACTIVE_TO_SOLD_DISCOUNT = 0.85;
+// All server-side sold comp sources are blocked (eBay Finding API 503, scrapers 403).
+// Apply for Marketplace Insights API at developer.ebay.com for real sold data.
+// Fallback: use the cheapest 30% of active listings as the price estimate — overpriced
+// cards never sell and inflate the median; bottom-third listings are priced to move.
 const EDGE_COMPS_URL = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}/api/comps-edge`
   : "http://localhost:3000/api/comps-edge";
@@ -46,20 +47,26 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
   }
 
   if (hasCredentials) {
-    // 3. Browse API (active) × discount — least accurate, last resort
+    // 3. Browse API (active), bottom-third pricing — last resort
+    // Overpriced cards sit unsold for months; cheapest 30% are priced to actually sell,
+    // making them the best available estimate for what buyers will actually pay.
     try {
-      const active = await searchActiveListings(query, { limit });
+      const active = await searchActiveListings(query, { limit: Math.max(limit, 50) });
       if (active.length) {
-        const items: SoldComp[] = active.map((a) => ({
+        // Sort by total price and take the cheapest third
+        const sorted = [...active].sort((a, b) => a.totalPrice - b.totalPrice);
+        const cutoff = Math.max(Math.ceil(sorted.length * 0.3), 3);
+        const cheapest = sorted.slice(0, cutoff);
+        const items: SoldComp[] = cheapest.map((a) => ({
           title: a.title,
-          price: +(a.price * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
-          shipping: +(a.shipping * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
-          totalPrice: +(a.totalPrice * ACTIVE_TO_SOLD_DISCOUNT).toFixed(2),
+          price: a.price,
+          shipping: a.shipping,
+          totalPrice: a.totalPrice,
           soldDate: null, url: a.url, image: a.image ?? null, condition: a.condition ?? null,
         }));
         return {
           ...summarize(query, items), source: "browse-active",
-          note: `Estimated from active listings × ${ACTIVE_TO_SOLD_DISCOUNT} — sold comps unavailable.`,
+          note: `Estimated from cheapest ${cutoff} of ${active.length} active listings — apply for eBay Marketplace Insights API for real sold data.`,
         };
       }
     } catch { /* fall through */ }
