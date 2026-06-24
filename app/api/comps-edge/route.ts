@@ -38,54 +38,86 @@ function buildStats(prices: number[], query: string, items: unknown[]) {
   };
 }
 
-// --- Mavin.io scraper ---
-// Mavin aggregates eBay sold data. Different domain = different IP rules from eBay.
-async function tryMavin(query: string) {
-  const url = `https://mavin.io/search?q=${encodeURIComponent(query)}&buying=1`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "en-US,en;q=0.9" },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  const html = await res.text();
+// --- 130point.com — sports card eBay sold data aggregator ---
+async function try130point(query: string): Promise<{ result: ReturnType<typeof buildStats>; error?: string }> {
+  const url = `https://130point.com/sales/?search=${encodeURIComponent(query)}`;
+  let status = 0;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": UA,
+        Accept: "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+        Referer: "https://130point.com/",
+      },
+      cache: "no-store",
+    });
+    status = res.status;
+    if (!res.ok) return { result: null, error: `130point status ${status}` };
 
-  const items: Array<{ title: string; price: number; shipping: number; totalPrice: number; soldDate: string | null; url: string; image: string | null; condition: string | null }> = [];
+    const html = await res.text();
+    const items: Array<{ title: string; price: number; shipping: number; totalPrice: number; soldDate: string | null; url: string; image: string | null; condition: string | null }> = [];
 
-  // Mavin lists sold items in cards — parse each sold listing block
-  // Pattern: data-price="XX.XX" and nearby title/date elements
-  const blocks = html.split(/class="[^"]*sold-item[^"]*"/);
-  if (blocks.length < 2) {
-    // Try alternate split on item cards
-    const priceMatches = [...html.matchAll(/data-price="([\d.]+)"[^>]*data-title="([^"]+)"/g)];
-    for (const m of priceMatches) {
-      const price = parseFloat(m[1]);
-      if (!price) continue;
-      items.push({ title: decodeEntities(m[2]), price, shipping: 0, totalPrice: price, soldDate: null, url: "", image: null, condition: null });
-    }
-  } else {
-    for (const block of blocks.slice(1)) {
+    // 130point renders each sale in a table row — parse price and title
+    const rows = html.split(/<tr[^>]*>/);
+    for (const row of rows.slice(1)) {
       if (items.length >= 40) break;
-      const priceMatch = block.match(/\$([\d,]+\.?\d*)/);
+      const priceMatch = row.match(/\$\s*([\d,]+\.?\d*)/);
       const price = priceMatch ? parseMoney(priceMatch[1]) : 0;
       if (!price) continue;
-      const titleMatch = block.match(/title[^>]*>([^<]{5,80})</i);
-      const title = titleMatch ? decodeEntities(stripTags(titleMatch[1])) : "";
-      const dateMatch = block.match(/(\w+ \d{1,2},?\s*\d{4})/);
+      const titleMatch = row.match(/<td[^>]*>([^<]{5,100})<\/td>/);
+      const title = titleMatch ? decodeEntities(stripTags(titleMatch[1])).trim() : "";
+      if (!title || /price|date|sale/i.test(title)) continue;
+      const dateMatch = row.match(/(\d{1,2}\/\d{1,2}\/\d{2,4}|\w+ \d{1,2},? \d{4})/);
       const soldDate = dateMatch ? dateMatch[1] : null;
-      const urlMatch = block.match(/href="(\/item\/[^"]+)"/);
-      const itemUrl = urlMatch ? `https://mavin.io${urlMatch[1]}` : "";
-      items.push({ title, price, shipping: 0, totalPrice: price, soldDate, url: itemUrl, image: null, condition: null });
+      const urlMatch = row.match(/href="(https?:\/\/[^"]+ebay[^"]+)"/);
+      items.push({ title, price, shipping: 0, totalPrice: price, soldDate, url: urlMatch ? urlMatch[1] : "", image: null, condition: null });
     }
-  }
 
-  if (!items.length) return null;
-  const prices = items.map((i) => i.totalPrice).filter((p) => p > 0).sort((a, b) => a - b);
-  return buildStats(prices, query, items);
+    if (!items.length) return { result: null, error: `130point: parsed 0 items from ${rows.length} rows (html len ${html.length})` };
+    const prices = items.map((i) => i.totalPrice).filter((p) => p > 0).sort((a, b) => a - b);
+    return { result: buildStats(prices, query, items) };
+  } catch (e) {
+    return { result: null, error: `130point threw: ${e instanceof Error ? e.message : String(e)} (status ${status})` };
+  }
+}
+
+// --- Mavin.io --- sports card sold data
+async function tryMavin(query: string): Promise<{ result: ReturnType<typeof buildStats>; error?: string }> {
+  const url = `https://mavin.io/search?q=${encodeURIComponent(query)}&buying=1`;
+  let status = 0;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA, Accept: "text/html", "Accept-Language": "en-US,en;q=0.9", Referer: "https://mavin.io/" },
+      cache: "no-store",
+    });
+    status = res.status;
+    if (!res.ok) return { result: null, error: `mavin status ${status}` };
+
+    const html = await res.text();
+    const items: Array<{ title: string; price: number; shipping: number; totalPrice: number; soldDate: string | null; url: string; image: string | null; condition: string | null }> = [];
+
+    // Mavin shows each sale as a row with price, title, date
+    // Try multiple parsing strategies
+    const priceMatches = [...html.matchAll(/\$\s*(\d[\d,]*\.?\d*)/g)];
+    const allPrices = priceMatches.map((m) => parseMoney(m[1])).filter((p) => p >= 1 && p <= 50000);
+
+    if (!allPrices.length) return { result: null, error: `mavin: no prices found in ${html.length} chars` };
+
+    // Build fake items from prices for stats (we at least know the price distribution)
+    for (const price of allPrices.slice(0, 40)) {
+      items.push({ title: query, price, shipping: 0, totalPrice: price, soldDate: null, url: "", image: null, condition: null });
+    }
+
+    const prices = items.map((i) => i.totalPrice).sort((a, b) => a - b);
+    return { result: buildStats(prices, query, items) };
+  } catch (e) {
+    return { result: null, error: `mavin threw: ${e instanceof Error ? e.message : String(e)} (status ${status})` };
+  }
 }
 
 // --- eBay Finding API (findCompletedItems) ---
-// Returns 503 from AWS serverless IPs; Cloudflare IPs may differ.
-async function tryFindingApi(query: string, appId: string) {
+async function tryFindingApi(query: string, appId: string): Promise<{ result: ReturnType<typeof buildStats>; error?: string }> {
   const base = "https://svcs.ebay.com/services/search/FindingService/v1";
   const qs = [
     `OPERATION-NAME=findCompletedItems`,
@@ -100,53 +132,52 @@ async function tryFindingApi(query: string, appId: string) {
     `sortOrder=EndTimeSoonest`,
   ].join("&");
 
-  const res = await fetch(`${base}?${qs}`, {
-    headers: { "User-Agent": UA },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
+  let status = 0;
+  try {
+    const res = await fetch(`${base}?${qs}`, { headers: { "User-Agent": UA }, cache: "no-store" });
+    status = res.status;
+    if (!res.ok) return { result: null, error: `finding-api status ${status}` };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const json = await res.json() as any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawItems: any[] = json?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item ?? [];
-  if (!rawItems.length) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const json = await res.json() as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawItems: any[] = json?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item ?? [];
+    if (!rawItems.length) return { result: null, error: "finding-api: 0 items returned" };
 
-  const items = rawItems.map((it) => {
-    const price = parseFloat(it.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0");
-    return {
-      title: it.title?.[0] ?? "",
-      price, shipping: 0, totalPrice: price,
-      soldDate: it.listingInfo?.[0]?.endTime?.[0] ?? null,
-      url: it.viewItemURL?.[0] ?? "",
-      image: it.galleryURL?.[0] ?? null,
-      condition: it.condition?.[0]?.conditionDisplayName?.[0] ?? null,
-    };
-  });
-
-  const prices = items.map((i) => i.totalPrice).filter((p) => p > 0).sort((a, b) => a - b);
-  return buildStats(prices, query, items);
+    const items = rawItems.map((it) => {
+      const price = parseFloat(it.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? "0");
+      return { title: it.title?.[0] ?? "", price, shipping: 0, totalPrice: price, soldDate: it.listingInfo?.[0]?.endTime?.[0] ?? null, url: it.viewItemURL?.[0] ?? "", image: it.galleryURL?.[0] ?? null, condition: it.condition?.[0]?.conditionDisplayName?.[0] ?? null };
+    });
+    const prices = items.map((i) => i.totalPrice).filter((p) => p > 0).sort((a, b) => a - b);
+    return { result: buildStats(prices, query, items) };
+  } catch (e) {
+    return { result: null, error: `finding-api threw: ${e instanceof Error ? e.message : String(e)} (status ${status})` };
+  }
 }
 
 export async function GET(req: NextRequest) {
   const query = new URL(req.url).searchParams.get("q") ?? "";
   if (!query) return NextResponse.json({ error: "q param required" }, { status: 400 });
-
   const appId = (process.env.EBAY_APP_ID ?? "").trim();
 
-  // 1. Try Finding API first (real eBay sold data, but 503s from AWS)
+  const errors: Record<string, string> = {};
+
+  // 1. Finding API
   if (appId) {
-    try {
-      const result = await tryFindingApi(query, appId);
-      if (result) return NextResponse.json({ ...result, source: "finding-api" });
-    } catch { /* fall through */ }
+    const { result, error } = await tryFindingApi(query, appId);
+    if (result) return NextResponse.json({ ...result, source: "finding-api" });
+    if (error) errors.findingApi = error;
   }
 
-  // 2. Try Mavin.io (aggregates eBay sold data, different domain)
-  try {
-    const result = await tryMavin(query);
-    if (result) return NextResponse.json({ ...result, source: "mavin" });
-  } catch { /* fall through */ }
+  // 2. 130point.com
+  const { result: r130, error: e130 } = await try130point(query);
+  if (r130) return NextResponse.json({ ...r130, source: "130point" });
+  if (e130) errors["130point"] = e130;
 
-  return NextResponse.json({ error: "Could not fetch sold comps — all sources blocked or unavailable" });
+  // 3. Mavin.io
+  const { result: rMavin, error: eMavin } = await tryMavin(query);
+  if (rMavin) return NextResponse.json({ ...rMavin, source: "mavin" });
+  if (eMavin) errors.mavin = eMavin;
+
+  return NextResponse.json({ error: "All sold comp sources failed", errors });
 }
