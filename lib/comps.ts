@@ -5,7 +5,7 @@ import {
   searchSoldListings,
 } from "./ebay-api";
 
-export type CompSource = "marketplace-insights" | "finding-api" | "browse-active" | "scraper";
+export type CompSource = "marketplace-insights" | "finding-api" | "mavin" | "browse-active" | "scraper";
 export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
 // eBay's Finding API returns 503 from Vercel serverless (AWS IPs).
