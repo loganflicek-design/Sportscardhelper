@@ -2,17 +2,18 @@ import { fetchSoldComps, type CompsResult, type SoldComp } from "./ebay";
 import {
   hasEbayApiCredentials,
   searchActiveListings,
-  searchActiveByFindingApi,
-  searchSoldByFindingApi,
   searchSoldListings,
 } from "./ebay-api";
 
 export type CompSource = "marketplace-insights" | "finding-api" | "browse-active" | "scraper";
 export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
-// eBay blocks scraping from all server IPs (AWS + Cloudflare). Finding API is the only
-// reliable source for sold comps. Active × discount is the last-resort fallback.
+// eBay's Finding API returns 503 from Vercel serverless (AWS IPs).
+// The edge route calls Finding API from Cloudflare IPs which may not be blocked.
 const ACTIVE_TO_SOLD_DISCOUNT = 0.85;
+const EDGE_COMPS_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}/api/comps-edge`
+  : "http://localhost:3000/api/comps-edge";
 
 export async function getComps(query: string, limit = 60): Promise<UnifiedComps> {
   const hasCredentials = hasEbayApiCredentials();
@@ -31,16 +32,15 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
     } catch { /* not granted */ }
   }
 
-  // 2. Finding API (sold) — App ID only, no OAuth needed
+  // 2. Finding API via edge route (Cloudflare IPs) — svcs.ebay.com blocks Vercel AWS IPs
   if (process.env.EBAY_APP_ID) {
     try {
-      const sold = await searchSoldByFindingApi(query, { limit });
-      if (sold.length) {
-        const items: SoldComp[] = sold.map((s) => ({
-          title: s.title, price: s.price, shipping: 0, totalPrice: s.price,
-          soldDate: s.soldAt ?? null, url: s.url, image: s.image ?? null, condition: s.condition ?? null,
-        }));
-        return { ...summarize(query, items), source: "finding-api" };
+      const r = await fetch(`${EDGE_COMPS_URL}?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+      if (r.ok) {
+        const data = await r.json() as CompsResult & { error?: string };
+        if (!data.error && data.count > 0) {
+          return { ...data, source: "finding-api" };
+        }
       }
     } catch { /* fall through */ }
   }
