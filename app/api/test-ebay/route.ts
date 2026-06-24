@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { searchActiveListings } from "@/lib/ebay-api";
-
-const HOST = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+import { searchActiveListings, searchSoldByFindingApi, searchActiveByFindingApi } from "@/lib/ebay-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,46 +10,28 @@ export async function GET() {
     certId: process.env.EBAY_CERT_ID ? "set" : "NOT SET",
   };
 
-  // Test Finding API raw response
+  // Test Finding API — SOLD listings (findCompletedItems)
   try {
-    const appId = process.env.EBAY_APP_ID!;
-    const base = "https://svcs.ebay.com/services/search/FindingService/v1";
-    const qs = [
-      `OPERATION-NAME=findItemsByKeywords`,
-      `SERVICE-VERSION=1.0.0`,
-      `SECURITY-APPNAME=${encodeURIComponent(appId)}`,
-      `RESPONSE-DATA-FORMAT=JSON`,
-      `keywords=baseball+rookie+PSA`,
-      `categoryId=212`,
-      `paginationInput.entriesPerPage=3`,
-    ].join("&");
-    const res = await fetch(`${base}?${qs}`, { cache: "no-store" });
-    const text = await res.text();
-    results.findingApi = { status: res.status, body: text.slice(0, 500) };
+    const sold = await searchSoldByFindingApi("Shohei Ohtani PSA 10 rookie", { limit: 3 });
+    results.findingApiSold = { count: sold.length, sample: sold[0] ?? null };
   } catch (e) {
-    results.findingApiError = e instanceof Error ? e.message : String(e);
+    results.findingApiSoldError = e instanceof Error ? e.message : String(e);
   }
 
-  // Test Browse API (OAuth)
+  // Test Finding API — ACTIVE listings (findItemsByKeywords)
+  try {
+    const active = await searchActiveByFindingApi("baseball rookie PSA 10", { limit: 3 });
+    results.findingApiActive = { count: active.length, sample: active[0] ?? null };
+  } catch (e) {
+    results.findingApiActiveError = e instanceof Error ? e.message : String(e);
+  }
+
+  // Test Browse API (OAuth) — active listings
   try {
     const active = await searchActiveListings("baseball rookie PSA 10", { limit: 3 });
     results.browseApi = { count: active.length, sample: active[0] ?? null };
   } catch (e) {
     results.browseApiError = e instanceof Error ? e.message : String(e);
-  }
-
-  // Test edge scraper (Cloudflare IPs — may bypass eBay datacenter block)
-  try {
-    const r = await fetch(`${HOST}/api/comps-edge?q=Shohei+Ohtani+PSA+10+rookie`, { cache: "no-store" });
-    const text = await r.text();
-    try {
-      const data = JSON.parse(text) as Record<string, unknown>;
-      results.edgeScraper = { status: r.status, count: data.count, median: data.median, error: data.error };
-    } catch {
-      results.edgeScraper = { status: r.status, rawResponse: text.slice(0, 300) };
-    }
-  } catch (e) {
-    results.edgeScraperError = e instanceof Error ? e.message : String(e);
   }
 
   return NextResponse.json(results);

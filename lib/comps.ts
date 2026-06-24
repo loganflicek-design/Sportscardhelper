@@ -7,13 +7,12 @@ import {
   searchSoldListings,
 } from "./ebay-api";
 
-export type CompSource = "marketplace-insights" | "finding-api" | "edge-scraper" | "browse-active" | "scraper";
+export type CompSource = "marketplace-insights" | "finding-api" | "browse-active" | "scraper";
 export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
-const ACTIVE_TO_SOLD_DISCOUNT = 0.9;
-const EDGE_COMPS_URL = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}/api/comps-edge`
-  : "http://localhost:3000/api/comps-edge";
+// eBay blocks scraping from all server IPs (AWS + Cloudflare). Finding API is the only
+// reliable source for sold comps. Active × discount is the last-resort fallback.
+const ACTIVE_TO_SOLD_DISCOUNT = 0.85;
 
 export async function getComps(query: string, limit = 60): Promise<UnifiedComps> {
   const hasCredentials = hasEbayApiCredentials();
@@ -46,19 +45,8 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
     } catch { /* fall through */ }
   }
 
-  // 3. Edge scraper — runs on Cloudflare IPs, may bypass eBay's datacenter block
-  try {
-    const r = await fetch(`${EDGE_COMPS_URL}?q=${encodeURIComponent(query)}`, { cache: "no-store" });
-    if (r.ok) {
-      const data = await r.json() as CompsResult & { error?: string };
-      if (!data.error && data.count > 0) {
-        return { ...data, source: "edge-scraper" };
-      }
-    }
-  } catch { /* fall through */ }
-
   if (hasCredentials) {
-    // 4. Browse API (active) × discount — least accurate, last API resort
+    // 3. Browse API (active) × discount — least accurate, last resort
     try {
       const active = await searchActiveListings(query, { limit });
       if (active.length) {
@@ -71,13 +59,13 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
         }));
         return {
           ...summarize(query, items), source: "browse-active",
-          note: `Using active-listing prices × ${ACTIVE_TO_SOLD_DISCOUNT} — sold comps unavailable.`,
+          note: `Estimated from active listings × ${ACTIVE_TO_SOLD_DISCOUNT} — sold comps unavailable.`,
         };
       }
     } catch { /* fall through */ }
   }
 
-  // 5. Direct scraper (likely 403 from Vercel serverless IPs)
+  // 4. Direct scraper fallback (likely 403 from Vercel IPs)
   const scraped = await fetchSoldComps(query, limit);
   return { ...scraped, source: "scraper" };
 }
