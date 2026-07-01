@@ -47,13 +47,34 @@ export async function POST(req: NextRequest) {
     const platformKey = (settings.sellPlatform ?? "tiktok_ig_cash") as keyof typeof PLATFORM_PRESETS;
     const fees = PLATFORM_PRESETS[platformKey] ?? PLATFORM_PRESETS.tiktok_ig_cash;
 
-    // Targeted queries — specific enough to find flip-worthy cards
+    // Exclusions appended to every query — keeps mystery packs, lots, and bulk out
+    const EXCLUDE = "-mystery -lot -pack -bundle -blind -break -random -repack -box";
+
+    // Targeted queries — specific enough to find flip-worthy single cards
     const SPORT_QUERIES: Record<string, string[]> = {
-      baseball: ["baseball rookie refractor PSA", "baseball rookie prizm chrome", "baseball rookie auto patch"],
-      basketball: ["basketball rookie prizm PSA 10", "basketball rookie optic refractor", "basketball rookie auto"],
-      football: ["football rookie prizm PSA 10", "football rookie optic refractor", "football rookie auto patch"],
-      hockey: ["hockey rookie Young Guns PSA", "hockey rookie prizm refractor"],
-      soccer: ["soccer rookie Prizm PSA", "soccer rookie auto"],
+      baseball: [
+        `baseball rookie refractor PSA ${EXCLUDE}`,
+        `baseball rookie prizm chrome ${EXCLUDE}`,
+        `baseball rookie auto patch ${EXCLUDE}`,
+      ],
+      basketball: [
+        `basketball rookie prizm PSA 10 ${EXCLUDE}`,
+        `basketball rookie optic refractor ${EXCLUDE}`,
+        `basketball rookie auto ${EXCLUDE}`,
+      ],
+      football: [
+        `football rookie prizm PSA 10 ${EXCLUDE}`,
+        `football rookie optic refractor ${EXCLUDE}`,
+        `football rookie auto patch ${EXCLUDE}`,
+      ],
+      hockey: [
+        `hockey rookie Young Guns PSA ${EXCLUDE}`,
+        `hockey rookie prizm refractor ${EXCLUDE}`,
+      ],
+      soccer: [
+        `soccer rookie Prizm PSA ${EXCLUDE}`,
+        `soccer rookie auto ${EXCLUDE}`,
+      ],
     };
 
     const queries: string[] = [];
@@ -76,17 +97,19 @@ export async function POST(req: NextRequest) {
     await Promise.allSettled(
       queries.map(async (q) => {
         try {
-          let results = await searchActiveByFindingApi(q, { maxPrice: settings.maxBudget, limit: 8 }).catch((e) => {
+          let results = await searchActiveByFindingApi(q, { maxPrice: settings.maxBudget, limit: 15 }).catch((e) => {
             searchErrors.push(`FindingAPI[${q}]: ${e.message}`);
             return null;
           });
-          if (!results) results = await searchActiveListings(q, { maxPrice: settings.maxBudget, limit: 8 }).catch((e) => {
+          if (!results) results = await searchActiveListings(q, { maxPrice: settings.maxBudget, limit: 15 }).catch((e) => {
             searchErrors.push(`BrowseAPI[${q}]: ${e.message}`);
             return [];
           });
           for (const r of (results ?? [])) {
             if (seen.has(r.itemId)) continue;
             if (r.totalPrice < settings.minBudget || r.totalPrice > settings.maxBudget) continue;
+            // Skip mystery packs, lots, bundles, breaks — single cards only
+            if (/mystery|blind|repack|\blot\b|bundle|break|random|box set/i.test(r.title)) continue;
             seen.add(r.itemId);
             candidates.push({
               itemId: r.itemId,
@@ -108,7 +131,7 @@ export async function POST(req: NextRequest) {
     // Get comps in batches of 5 to stay under the 10-second Vercel limit
     const deals: FoundDeal[] = [];
     const BATCH = 5;
-    for (let i = 0; i < Math.min(candidates.length, 30); i += BATCH) {
+    for (let i = 0; i < Math.min(candidates.length, 50); i += BATCH) {
       await Promise.allSettled(
         candidates.slice(i, i + BATCH).map(async (c) => {
           try {

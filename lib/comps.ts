@@ -10,8 +10,9 @@ export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
 // All server-side sold comp sources are blocked (eBay Finding API 503, scrapers 403).
 // Apply for Marketplace Insights API at developer.ebay.com for real sold data.
-// Fallback: use the cheapest 30% of active listings as the price estimate — overpriced
-// cards never sell and inflate the median; bottom-third listings are priced to move.
+// Fallback: median of active listings × 0.82 — represents realistic sell price.
+// Bottom-30% was too conservative; the card we're buying IS often in that range.
+const ACTIVE_SELL_FACTOR = 0.82;
 const EDGE_COMPS_URL = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}/api/comps-edge`
   : "http://localhost:3000/api/comps-edge";
@@ -47,26 +48,22 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
   }
 
   if (hasCredentials) {
-    // 3. Browse API (active), bottom-third pricing — last resort
-    // Overpriced cards sit unsold for months; cheapest 30% are priced to actually sell,
-    // making them the best available estimate for what buyers will actually pay.
+    // 3. Browse API (active) × discount — last resort
+    // Use median of all active listings × 0.82 to estimate realistic sell price.
+    // Bottom-30% was circular — the card we're buying is often in that cheap range.
     try {
       const active = await searchActiveListings(query, { limit: Math.max(limit, 50) });
       if (active.length) {
-        // Sort by total price and take the cheapest third
-        const sorted = [...active].sort((a, b) => a.totalPrice - b.totalPrice);
-        const cutoff = Math.max(Math.ceil(sorted.length * 0.3), 3);
-        const cheapest = sorted.slice(0, cutoff);
-        const items: SoldComp[] = cheapest.map((a) => ({
+        const items: SoldComp[] = active.map((a) => ({
           title: a.title,
-          price: a.price,
-          shipping: a.shipping,
-          totalPrice: a.totalPrice,
+          price: +(a.price * ACTIVE_SELL_FACTOR).toFixed(2),
+          shipping: +(a.shipping * ACTIVE_SELL_FACTOR).toFixed(2),
+          totalPrice: +(a.totalPrice * ACTIVE_SELL_FACTOR).toFixed(2),
           soldDate: null, url: a.url, image: a.image ?? null, condition: a.condition ?? null,
         }));
         return {
           ...summarize(query, items), source: "browse-active",
-          note: `Estimated from cheapest ${cutoff} of ${active.length} active listings — apply for eBay Marketplace Insights API for real sold data.`,
+          note: `Estimated from ${active.length} active listings × ${ACTIVE_SELL_FACTOR} — real sold data pending eBay Marketplace Insights API approval.`,
         };
       }
     } catch { /* fall through */ }
