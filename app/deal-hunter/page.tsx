@@ -17,6 +17,22 @@ const DEFAULT_SETTINGS: HuntSettings = {
   updatedAt: "",
 };
 
+const LS_DEALS = "dh-deals";
+const LS_SETTINGS = "dh-settings";
+
+function lsLoadDeals(): FoundDeal[] {
+  try { return JSON.parse(localStorage.getItem(LS_DEALS) ?? "[]"); } catch { return []; }
+}
+function lsSaveDeals(deals: FoundDeal[]) {
+  try { localStorage.setItem(LS_DEALS, JSON.stringify(deals)); } catch { /* quota */ }
+}
+function lsLoadSettings(): HuntSettings | null {
+  try { return JSON.parse(localStorage.getItem(LS_SETTINGS) ?? "null"); } catch { return null; }
+}
+function lsSaveSettings(s: HuntSettings) {
+  try { localStorage.setItem(LS_SETTINGS, JSON.stringify(s)); } catch { /* quota */ }
+}
+
 export default function DealHunterPage() {
   const [settings, setSettings] = useState<HuntSettings>(DEFAULT_SETTINGS);
   const [deals, setDeals] = useState<FoundDeal[]>([]);
@@ -28,23 +44,21 @@ export default function DealHunterPage() {
   const [keywordInput, setKeywordInput] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(true);
 
-  async function load() {
-    const r = await fetch("/api/deal-hunter", { cache: "no-store" });
-    const d = await r.json();
-    setSettings(d.settings);
-    setDeals(d.deals);
-    setEbayReady(d.ebayReady);
-  }
-
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    // Load from localStorage first (persists across Vercel cold starts)
+    const cachedSettings = lsLoadSettings();
+    if (cachedSettings) setSettings(cachedSettings);
+    setDeals(lsLoadDeals().filter((d) => !d.dismissed));
+    // Check if eBay API is ready
+    fetch("/api/deal-hunter", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setEbayReady(d.ebayReady))
+      .catch(() => {});
+  }, []);
 
   async function saveSettings() {
     setSaving(true);
-    await fetch("/api/deal-hunter", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "save-settings", settings }),
-    });
+    lsSaveSettings(settings);
     setSaving(false);
   }
 
@@ -53,16 +67,18 @@ export default function DealHunterPage() {
     setError(null);
     setScanResult(null);
     try {
-      await saveSettings();
+      lsSaveSettings(settings);
       const r = await fetch("/api/deal-hunter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "scan" }),
+        body: JSON.stringify({ action: "scan", settings }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error);
       setScanResult({ scanned: d.scanned, found: d.found });
-      setDeals(d.deals);
+      const freshDeals: FoundDeal[] = d.deals ?? [];
+      setDeals(freshDeals.filter((x) => !x.dismissed));
+      lsSaveDeals(freshDeals);
       setSettingsOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Scan failed");
@@ -72,12 +88,11 @@ export default function DealHunterPage() {
   }
 
   async function dismiss(id: string) {
-    await fetch("/api/deal-hunter", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "dismiss", id }),
+    setDeals((prev) => {
+      const updated = prev.filter((d) => d.id !== id);
+      lsSaveDeals(updated);
+      return updated;
     });
-    setDeals((prev) => prev.filter((d) => d.id !== id));
   }
 
   function toggleSport(sport: string) {

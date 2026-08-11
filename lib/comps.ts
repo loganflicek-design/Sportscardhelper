@@ -2,55 +2,34 @@ import { fetchSoldComps, type CompsResult, type SoldComp } from "./ebay";
 import {
   hasEbayApiCredentials,
   searchActiveListings,
-  searchSoldListings,
 } from "./ebay-api";
 
-export type CompSource = "marketplace-insights" | "finding-api" | "130point" | "mavin" | "browse-active" | "scraper";
+export type CompSource = "finding-api" | "130point" | "mavin" | "browse-active" | "scraper";
 export type UnifiedComps = CompsResult & { source: CompSource; note?: string };
 
-// All server-side sold comp sources are blocked (eBay Finding API 503, scrapers 403).
-// Apply for Marketplace Insights API at developer.ebay.com for real sold data.
-// Fallback: median of active listings × 0.82 — represents realistic sell price.
-// Bottom-30% was too conservative; the card we're buying IS often in that range.
+// Fallback when no sold data available: median active × 0.82 estimates realistic sell price.
 const ACTIVE_SELL_FACTOR = 0.82;
 const EDGE_COMPS_URL = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}/api/comps-edge`
   : "http://localhost:3000/api/comps-edge";
 
 export async function getComps(query: string, limit = 60): Promise<UnifiedComps> {
-  const hasCredentials = hasEbayApiCredentials();
-
-  if (hasCredentials) {
-    // 1. Marketplace Insights (sold) — requires special eBay approval
-    try {
-      const sold = await searchSoldListings(query, { limit });
-      if (sold.length) {
-        const items: SoldComp[] = sold.map((s) => ({
-          title: s.title, price: s.price, shipping: 0, totalPrice: s.price,
-          soldDate: s.soldAt ?? null, url: s.url, image: s.image ?? null, condition: s.condition ?? null,
-        }));
-        return { ...summarize(query, items), source: "marketplace-insights" };
-      }
-    } catch { /* not granted */ }
-  }
-
-  // 2. Finding API via edge route (Cloudflare IPs) — svcs.ebay.com blocks Vercel AWS IPs
+  // 1. Edge route (Cloudflare IPs): tries Finding API → 130point → Mavin
+  //    eBay's svcs.ebay.com blocks AWS IPs but usually allows Cloudflare edge.
   if (process.env.EBAY_APP_ID) {
     try {
       const r = await fetch(`${EDGE_COMPS_URL}?q=${encodeURIComponent(query)}`, { cache: "no-store" });
       if (r.ok) {
-        const data = await r.json() as CompsResult & { error?: string };
+        const data = await r.json() as CompsResult & { source?: string; error?: string };
         if (!data.error && data.count > 0) {
-          return { ...data, source: "finding-api" };
+          return { ...data, source: (data.source as CompSource) ?? "finding-api" };
         }
       }
     } catch { /* fall through */ }
   }
 
-  if (hasCredentials) {
-    // 3. Browse API (active) × discount — last resort
-    // Use median of all active listings × 0.82 to estimate realistic sell price.
-    // Bottom-30% was circular — the card we're buying is often in that cheap range.
+  if (hasEbayApiCredentials()) {
+    // 2. Browse API (active listings) × discount — last resort when all sold sources fail
     try {
       const active = await searchActiveListings(query, { limit: Math.max(limit, 50) });
       if (active.length) {
@@ -63,13 +42,13 @@ export async function getComps(query: string, limit = 60): Promise<UnifiedComps>
         }));
         return {
           ...summarize(query, items), source: "browse-active",
-          note: `Estimated from ${active.length} active listings × ${ACTIVE_SELL_FACTOR} — real sold data pending eBay Marketplace Insights API approval.`,
+          note: `Estimated from ${active.length} active listings × ${ACTIVE_SELL_FACTOR}. Treat as rough guide only.`,
         };
       }
     } catch { /* fall through */ }
   }
 
-  // 4. Direct scraper fallback (likely 403 from Vercel IPs)
+  // 3. Direct scraper fallback (usually 403 from Vercel AWS IPs)
   const scraped = await fetchSoldComps(query, limit);
   return { ...scraped, source: "scraper" };
 }

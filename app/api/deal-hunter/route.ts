@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "EBAY_APP_ID not configured. Add it to your Vercel environment variables." }, { status: 503 });
     }
 
-    const settings = loadHuntSettings();
+    // Use settings sent from the client (localStorage) — server /tmp is ephemeral
+    const settings: HuntSettings = body.settings ?? loadHuntSettings();
     const platformKey = (settings.sellPlatform ?? "tiktok_ig_cash") as keyof typeof PLATFORM_PRESETS;
     const fees = PLATFORM_PRESETS[platformKey] ?? PLATFORM_PRESETS.tiktok_ig_cash;
 

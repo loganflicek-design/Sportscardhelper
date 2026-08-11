@@ -366,11 +366,24 @@ function VerdictBanner({ deal }: { deal: { verdict: string; reasoning: string; p
 }
 
 function SourceBadge({ source }: { source: string }) {
+  const isReal = source === "finding-api" || source === "marketplace-insights" || source === "130point" || source === "mavin";
+  const isEstimate = source === "browse-active";
   const label =
-    source === "marketplace-insights" ? "Sold comps (eBay API)" :
-    source === "browse-active" ? "Active listings × 0.9" :
-    "Scraped sold listings";
-  return <span className="text-[10px] uppercase tracking-wider text-white/40">{label}</span>;
+    source === "finding-api" ? "Real sold comps" :
+    source === "marketplace-insights" ? "Real sold comps" :
+    source === "130point" ? "Sold comps (130point)" :
+    source === "mavin" ? "Sold comps (Mavin)" :
+    source === "browse-active" ? "Estimated (active listings)" :
+    "Sold comps";
+  return (
+    <span className={`text-[10px] uppercase tracking-wider font-medium px-1.5 py-0.5 rounded ${
+      isReal ? "text-green-400 bg-green-400/10" :
+      isEstimate ? "text-yellow-400 bg-yellow-400/10" :
+      "text-white/40"
+    }`}>
+      {label}
+    </span>
+  );
 }
 
 function ModeButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {

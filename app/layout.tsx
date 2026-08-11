@@ -35,7 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </header>
         <main className="max-w-6xl mx-auto px-4 py-6">{children}</main>
         <footer className="max-w-6xl mx-auto px-4 py-8 text-xs text-white/40">
-          Sold comps are scraped from eBay&apos;s public sold-listings pages. Use figures as a guide, not gospel.
+          Sold comps come from eBay&apos;s Finding API and third-party aggregators. Use figures as a guide, not gospel.
         </footer>
       </body>
     </html>
