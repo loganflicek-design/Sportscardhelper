@@ -14,11 +14,13 @@ const EDGE_COMPS_URL = process.env.VERCEL_URL
   : "http://localhost:3000/api/comps-edge";
 
 export async function getComps(query: string, limit = 60): Promise<UnifiedComps> {
-  // 1. Edge route (Cloudflare IPs): tries Finding API → 130point → Mavin
+  // 1. Edge route (Cloudflare IPs): tries Finding API → eBay scrape → 130point → Mavin
   //    eBay's svcs.ebay.com blocks AWS IPs but usually allows Cloudflare edge.
   if (process.env.EBAY_APP_ID) {
+    // Shorter fallback query: first 5 words (broader match if primary returns nothing)
+    const fallback = query.split(/\s+/).slice(0, 5).join(" ");
     try {
-      const r = await fetch(`${EDGE_COMPS_URL}?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+      const r = await fetch(`${EDGE_COMPS_URL}?q=${encodeURIComponent(query)}&fallback=${encodeURIComponent(fallback)}`, { cache: "no-store" });
       if (r.ok) {
         const data = await r.json() as CompsResult & { source?: string; error?: string };
         if (!data.error && data.count > 0) {

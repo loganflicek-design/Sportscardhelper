@@ -13,6 +13,20 @@ import { getComps } from "@/lib/comps";
 import { scoreDeal } from "@/lib/fees";
 import { PLATFORM_PRESETS } from "@/lib/settings";
 
+/** Simplify a long eBay listing title into a clean comps search query */
+function simplifyTitle(title: string): string {
+  return title
+    .replace(/#\s*\d+/g, "")          // Card numbers #101
+    .replace(/\/\d{1,4}/g, "")        // Serial numbers /10 /99
+    .replace(/\b\d{1,4}\/\d{1,4}\b/g, "") // "5/10" style
+    .replace(/\([^)]+\)/g, "")        // Parentheticals
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .slice(0, 7)                       // Cap at 7 words — longer = fewer eBay results
+    .join(" ");
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -136,7 +150,7 @@ export async function POST(req: NextRequest) {
       await Promise.allSettled(
         candidates.slice(i, i + BATCH).map(async (c) => {
           try {
-            const comps = await getComps(c.title, 20);
+            const comps = await getComps(simplifyTitle(c.title), 20);
             const estimatedSellPrice = comps.median ?? 0;
             if (!estimatedSellPrice) return;
 

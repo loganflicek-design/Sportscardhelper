@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getComps, type UnifiedComps } from "@/lib/comps";
 import { scoreDeal, type DealResult } from "@/lib/fees";
 import type { Thresholds } from "@/lib/settings";
+import { buildCompsQuery } from "@/lib/comps-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,7 +111,8 @@ export async function POST(req: NextRequest) {
 
   if (!body.skipComps && identified.title) {
     try {
-      const comps = await getComps(identified.title, 30);
+      const { primary } = buildCompsQuery(identified);
+      const comps = await getComps(primary, 30);
       out.comps = comps;
       if (comps.median && body.cost && body.cost > 0) {
         out.deal = scoreDeal({
